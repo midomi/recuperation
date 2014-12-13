@@ -266,7 +266,7 @@ unsigned long izpisTextdisplay() {
   unsigned long start = micros();
   tft.setCursor(0, 0);
   tft.setTextColor(YELLOW);  tft.setTextSize(2);
-  tft.println(" TEMP.PRIPRAVE ZRAKA 4.3.");
+  tft.println(" TEMPERATURE PREZRACEVANJA");
   tft.setTextColor(WHITE);  tft.setTextSize(1);
   tft.println();
   narisiCrto(24, 22, 90, 22, WHITE);

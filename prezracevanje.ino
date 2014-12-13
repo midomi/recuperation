@@ -1,3 +1,4 @@
+//zacetek programa
 // knjižnice
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_TFTLCD.h> // Hardware-specific library

@@ -43,7 +43,7 @@ int index;              // števec prebranih vhodov
 Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 
 // text in pozicije za prikaz display-a
-char textAA[7][7] = {"voda  ", "zunaj ", "zunaj+", "dovod ", "dovod+", "dile  ", "box   "};
+char textAA[7][7] = {"voda  ", "zunaj ", "A.izm ", "rekup ", "B.izm ", "dile  ", "box   "};
 int tRow[] =        {  175,      50,        70,       90,      110,     135,      155}; // vrstica teksta 
 int pRow[] =        {  183,      58,        78,       98,      118,     143,      163}; // vrstica kroga 
 
@@ -297,26 +297,27 @@ unsigned long izpisTextdisplay() {
                }
             if (MIN[k] > -10){
                tft.print(" ");}
-            if (MIN[k] < 10);
-               if(MIN[k] > -0.1){
+            if (MIN[k] < 10){
+               if(MIN[k] > -0.1)
                  tft.print(" ");} 
             tft.setTextColor(GREEN);   
             tft.print(MIN[k],1);
-            tft.print("  ");
+            tft.print(" ");
             if (k == 1 or k == 3)
                 tft.setTextColor(CYAN); 
             else    
                 tft.setTextColor(YELLOW);                 
             if (tempValue[k] > -10){
                tft.print(" ");}
-            if (tempValue[k] < 10);
-               if(tempValue[k] > -0.1){
+            if (tempValue[k] < 10){
+               if(tempValue[k] > -0.1)
                  tft.print(" ");} 
             tft.print(tempValue[k],1);
+            tft.print(" ");
             if (MAX[k] > -10){
                tft.print(" ");}
-            if (MAX[k] < 10);
-               if(MAX[k] > -0.1){
+            if (MAX[k] < 10){
+               if(MAX[k] > -0.1)
                  tft.print(" ");} 
             tft.setTextColor(RED);
             tft.print(MAX[k],1);

@@ -11,16 +11,18 @@ DallasTemperature sensors(&oneWire);
 
 // ***************************   nastavljive spremenljivke  **************
          // vrednosti pogojev delovanja toplotnih izmenjevalnikov A in B 
-float minA = 3.0;          // minimum °C zraka na vhodu za dogrevanje (tipalo A1)
+float minA = 12.0;          // minimum °C zraka na vhodu za dogrevanje (tipalo A1)
 float minB = 12.0;          // minimum °C zraka na vpihu za dogrevanje (tipalo A3) 
 float maxA = 25.0;          // maximum °C zraka na vhodu(/vpihu za pohlajevanje (tipalo A1/A3)
 float maxB = 23.0;          // maximum °C zraka na vhodu(/vpihu za pohlajevanje (tipalo A1/A3)
-float miniVoda = 3.0;         // minimum °C vode v izmenjevalniku A za ALARM 
-         // tipla {   A0,    A1,    A2,    A3,    a4}         
+float miniVoda = 3.0;       // minimum °C vode v izmenjevalniku A za ALARM 
+float defVoda = 15.0;      // default temp. za vodo sekundarnega voda A izmenjevalnika (tipalo A0) 
+         // tipla {   A0,    A1,    A2,    A3,    A4}         
 float korek[] =   {-0.50, -0.50, -0.50, -0.50, -1.50}; // korekcijski faktor analognih tipal
 int uporValue[] = { 1049,  1049,  1049,  1049,  1049}; // pretvornik iz Ohm v °C 
 int indexValue = 60;    // število zaporednih branj tipal
 int index;              // števec prebranih vhodov
+int swPoletje;          // svič prvega prehoda na poletje za zapiranje ogrevanja
 
 // ****************************************************************************************
 #define LCD_CS A3 // Chip Select goes to Analog 3
@@ -68,8 +70,8 @@ int countSensor = 7;   // število tipal (5 analog. + 2 digit.)
    // 9. 12 alarm (Beeper)
    // 10. 50 releA elektromotornega ventila za izmenjevalnik A
    // 11. 51 releB elektromotornega ventila za izmenjevalnik B 
-int digiPin[] = {32, 34, 36, 38, 40, 42, 44, 13, 12, 50, 51};  // output digital pini (LED, Beeper, rele)
-int countPin = 11;    // število output pinov
+int digiPin[] = {32, 34, 36, 38, 40, 42, 44, 13, 12, 48, 49, 50, 51};  // output digital pini (LED, Beeper, rele)
+int countPin = 13;    // število output pinov
 
 float sensorValue[7];   // vrednost tipal
 float vrstaValue[7];    // vsota zaporedno prebranih vrednosti tipal
@@ -79,6 +81,7 @@ float tempValue[7];     // temperatura
 float MIN[7];           // minimalna temperatura tipal
 float MAX[7];           // maximalna temperatura tipal
 int indexVal[7];        // index prebranih vrednosti tipal
+float tempVoda;         // potrebna temp. vode v A izmenjevalniku pozimi
 
 
 // limit prebranih vrednosti tipal
@@ -193,21 +196,54 @@ void loop()
               digitalWrite(digiPin[8], HIGH);                                                  
           else                                                                    
               digitalWrite(digiPin[8], LOW);
-
-          // vklop - izklop dogrevanja/pohlajevanja zraka na vhodu (A izmenjevalnik)
-          if (tempValue[1] < minA or tempValue[1] > maxA)                            
-              digitalWrite(digiPin[9], HIGH);
+          // preračun potrebne temp. vode za A izmenjevalnik pozimi
+          if (tempValue[1] < 0)
+              tempVoda = defVoda + (tempValue[1] * -1);
           else
-              digitalWrite(digiPin[9], LOW);
+              tempVoda = defVoda;
+          // vklop - izklop dogrevanja/pohlajevanja zraka na vhodu (A izmenjevalnik)
+          if (tempValue[1] < minA){                    // je ZIMA? 
+             digitalWrite(digiPin[11], HIGH);          // obtočna črpalka dela  
+             digitalWrite(digiPin[13], HIGH);          // usmeri zrak v tla 
+             swPoletje = 0;          
+             if (tempValue[0] == tempVoda){             // je želeni mix vode?
+                 digitalWrite(digiPin[9], LOW);        // voda je OK
+             }
+             else{ 
+                 digitalWrite(digiPin[9], HIGH);       // miksaj 
+                 if (tempValue[0] < tempVoda)      
+                     digitalWrite(digiPin[10], HIGH);  // dodaja toplo vodo
+                 else
+                     digitalWrite(digiPin[10], LOW);   // dodaja hladno vodo        
+                 
+             }
+          }
+          else{                                        // je POLETJE?
+              digitalWrite(digiPin[10], LOW);
+              digitalWrite(digiPin[13], LOW);          // zrak v strop
+              if (swPoletje = 1){                      
+                 digitalWrite(digiPin[9], LOW);        // ogrevanje zaprto
+              }
+              else{
+                 digitalWrite(digiPin[9], HIGH);       // zapiram ogrevanje
+                 delay(210000);
+                 swPoletje = 1;
+              }
+              if (tempValue[1] > maxA)                // hlajenje
+                 digitalWrite(digiPin[11], HIGH);      // obtočna črpalka dela
+              else
+                 digitalWrite(digiPin[11], LOW);
+          }
+          
           // vklop - izklop dogrevanja/pohlajevanja zraka na vpihu (B izmenjevalnik)
 
           if (tempValue[1] < minB)                            
-              digitalWrite(digiPin[10], HIGH);
+              digitalWrite(digiPin[12], HIGH);
           else
               if (tempValue[3] > maxB)
-                 digitalWrite(digiPin[10], HIGH);
+                 digitalWrite(digiPin[12], HIGH);
               else 
-                 digitalWrite(digiPin[10], LOW);
+                 digitalWrite(digiPin[12], LOW);
    //izpis vrednosti
       // glava zapisa
         Serial.print("           voda ");

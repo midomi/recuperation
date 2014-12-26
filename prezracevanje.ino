@@ -82,6 +82,7 @@ float MIN[7];           // minimalna temperatura tipal
 float MAX[7];           // maximalna temperatura tipal
 int indexVal[7];        // index prebranih vrednosti tipal
 float tempVoda;         // potrebna temp. vode v A izmenjevalniku pozimi
+float tempValueZ = 20.0; // začetna vrednost zunanje temp.
 
 
 // limit prebranih vrednosti tipal
@@ -189,61 +190,37 @@ void loop()
                   if (tempValue[k] > MAX[k])
                       MAX[k] = tempValue[k];
                  }
-             }
-   
-          // ALARM - kontrola zmrzovanja vode  na vhodu zraka (A izmenjevalnik)  
-          if (tempValue[0] < miniVoda)                                                   
-              digitalWrite(digiPin[8], HIGH);                                                  
-          else                                                                    
-              digitalWrite(digiPin[8], LOW);
+          }
+          tempValueZ = tempValue[1];
           // preračun potrebne temp. vode za A izmenjevalnik pozimi
           if (tempValue[1] < 0)
               tempVoda = defVoda + (tempValue[1] * -1);
           else
               tempVoda = defVoda;
-          // vklop - izklop dogrevanja/pohlajevanja zraka na vhodu (A izmenjevalnik)
-          if (tempValue[1] < minA){                    // je ZIMA? 
-             digitalWrite(digiPin[11], HIGH);          // obtočna črpalka dela  
-             digitalWrite(digiPin[13], HIGH);          // usmeri zrak v tla 
-             swPoletje = 0;          
-             if (tempValue[0] == tempVoda){             // je želeni mix vode?
-                 digitalWrite(digiPin[9], LOW);        // voda je OK
-             }
-             else{ 
-                 digitalWrite(digiPin[9], HIGH);       // miksaj 
-                 if (tempValue[0] < tempVoda)      
-                     digitalWrite(digiPin[10], HIGH);  // dodaja toplo vodo
-                 else
-                     digitalWrite(digiPin[10], LOW);   // dodaja hladno vodo        
-                 
-             }
-          }
-          else{                                        // je POLETJE?
-              digitalWrite(digiPin[10], LOW);
-              digitalWrite(digiPin[13], LOW);          // zrak v strop
-              if (swPoletje = 1){                      
-                 digitalWrite(digiPin[9], LOW);        // ogrevanje zaprto
-              }
-              else{
-                 digitalWrite(digiPin[9], HIGH);       // zapiram ogrevanje
-                 delay(210000);
-                 swPoletje = 1;
-              }
-              if (tempValue[1] > maxA)                // hlajenje
-                 digitalWrite(digiPin[11], HIGH);      // obtočna črpalka dela
-              else
-                 digitalWrite(digiPin[11], LOW);
-          }
           
+          // ALARM - kontrola zmrzovanja vode  na vhodu zraka (A izmenjevalnik)  
+          if (tempValue[0] < miniVoda)                                                   
+              digitalWrite(digiPin[8], HIGH);                                                  
+          else                                                                    
+              digitalWrite(digiPin[8], LOW);
+              
           // vklop - izklop dogrevanja/pohlajevanja zraka na vpihu (B izmenjevalnik)
-
-          if (tempValue[1] < minB)                            
-              digitalWrite(digiPin[12], HIGH);
-          else
+          if (tempValue[1] < minB){                            
+              digitalWrite(digiPin[12], HIGH);     // ogrevanje
+          }
+          else{
               if (tempValue[3] > maxB)
-                 digitalWrite(digiPin[12], HIGH);
+                 digitalWrite(digiPin[12], HIGH);  // hlajenje
               else 
                  digitalWrite(digiPin[12], LOW);
+          }
+          
+          // usmerjanje zraka pozimi-poleti v tla-strop        
+            if (tempValue[1] < minA)                      
+                digitalWrite(digiPin[13], HIGH);     // usmeri zrak v tla 
+            else
+                digitalWrite(digiPin[13], LOW);      // usmeri zrak v strop 
+     
    //izpis vrednosti
       // glava zapisa
         Serial.print("           voda ");
@@ -284,7 +261,34 @@ void loop()
         initVrednost(); 
     }                                         
     // --- konec if zanke (index == indexValue) --- 
-
+    
+    // vklop - izklop dogrevanja/pohlajevanja zraka na vhodu (A izmenjevalnik)
+    if (tempValueZ < minA){                       // ZIMA 
+        digitalWrite(digiPin[11], HIGH);          // obtočna črpalka dela  
+        swPoletje = 0;          
+        if (sensorValue[0] == tempVoda){          
+            digitalWrite(digiPin[9], LOW);        // voda je OK
+        }      else{ 
+            digitalWrite(digiPin[9], HIGH);       // miksaj 
+            if (sensorValue[0] < tempVoda)      
+                digitalWrite(digiPin[10], HIGH);  // dodaja toplo vodo
+            else
+                digitalWrite(digiPin[10], LOW);   // dodaja hladno vodo        
+        }
+    }
+    else{                                         // POLETJE
+        digitalWrite(digiPin[10], LOW);
+        if (swPoletje == 0){                   
+           digitalWrite(digiPin[9], HIGH);        // ogrevanje zaprto
+           delay(210000);
+           swPoletje = 1;
+        }
+        if (tempValueZ > maxA)                  // hlajenje
+            digitalWrite(digiPin[11], HIGH);      // obtočna črpalka dela
+        else
+            digitalWrite(digiPin[11], LOW);
+    }
+          
   // turn the ledPin on
   digitalWrite(digiPin[7], HIGH);  
   // stop the program for <sensorValue> milliseconds:
@@ -295,6 +299,7 @@ void loop()
   delay(500);   
 
 }
+// *** konec glavne zanke ******************************************
 
 // *** prikaz na display *******************************************
 unsigned long izpisTextdisplay() {

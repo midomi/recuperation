@@ -11,16 +11,26 @@ DallasTemperature sensors(&oneWire);
 
 // ***************************   nastavljive spremenljivke  **************
          // vrednosti pogojev delovanja toplotnih izmenjevalnikov A in B 
-float minA = 12.0;          // minimum °C zraka na vhodu za dogrevanje (tipalo A1)
+float minA = 12.0;       // minimum °C zraka na vhodu za dogrevanje (tipalo A1)
 float minB = 12.0;          // minimum °C zraka na vpihu za dogrevanje (tipalo A3) 
 float maxA = 25.0;          // maximum °C zraka na vhodu(/vpihu za pohlajevanje (tipalo A1/A3)
 float maxB = 23.0;          // maximum °C zraka na vhodu(/vpihu za pohlajevanje (tipalo A1/A3)
-float miniVoda = 3.0;       // minimum °C vode v izmenjevalniku A za ALARM 
-float defVoda = 15.0;      // default temp. za vodo sekundarnega voda A izmenjevalnika (tipalo A0) 
+// float miniVoda = 3.0;       // minimum °C vode v izmenjevalniku A za ALARM 
+// float minMix = 10.0;    // začetna vrednost zunanje temp.
+// float maxMix = 12.0;    // začetna vrednost zunanje temp.
+
+// float tempZraka = 10.0;     // začetna vrednost zunanje temp.
+   // 0. trenutna temp. dogretega zraka na vhodu
+   // 1. prejšnja temp. dogretega zraka na vhodu
+   // 2. pred prejšnja temp. dogretega zraka na vhodu
+   // 3. mejna vrednost temp. dogretega zraka na vhodu za mix
+float tempZrak[] = {10, 0, 0, 9};
+
          // tipla {   A0,    A1,    A2,    A3,    A4}         
 float korek[] =   {-0.50, -0.50, -0.50, -0.50, -1.50}; // korekcijski faktor analognih tipal
 int uporValue[] = { 1049,  1049,  1049,  1049,  1049}; // pretvornik iz Ohm v °C 
 int indexValue = 60;    // število zaporednih branj tipal
+int indCrpalke = 0;     // števec rotacije obtočne črpalke
 int index;              // števec prebranih vhodov
 int swPoletje;          // svič prvega prehoda na poletje za zapiranje ogrevanja
 
@@ -59,19 +69,22 @@ int sensorPin[] = {A8, A9, A10, A11, A12};   // input pini analognih tipal
 int countSensor = 7;   // število tipal (5 analog. + 2 digit.)
 
 // določanje digitalnih output pinov
-   // 1. 32 LED D0 kontrolka tipala A0
-   // 2. 34 LED D1 kontrolka tipala A1
-   // 3. 36 LED D2 kontrolka tipala A2
-   // 4. 38 LED D3 kontrolka tipala A3
-   // 5. 40 LED D4 kontrolka tipala A4
-   // 6. 42 LED D5 kontrolka tipala D9
-   // 7. 44 LED D6 kontrolka tipala D10
-   // 8. 13 LED D8 Arduino   
-   // 9. 12 alarm (Beeper)
-   // 10. 50 releA elektromotornega ventila za izmenjevalnik A
-   // 11. 51 releB elektromotornega ventila za izmenjevalnik B 
-int digiPin[] = {32, 34, 36, 38, 40, 42, 44, 13, 12, 48, 49, 50, 51};  // output digital pini (LED, Beeper, rele)
-int countPin = 13;    // število output pinov
+   // 0. 32 LED D0 kontrolka tipala A0
+   // 1. 34 LED D1 kontrolka tipala A1
+   // 2. 36 LED D2 kontrolka tipala A2
+   // 3. 38 LED D3 kontrolka tipala A3
+   // 4. 40 LED D4 kontrolka tipala A4
+   // 5. 42 LED D5 kontrolka tipala D9
+   // 6. 44 LED D6 kontrolka tipala D10
+   // 7. 13 LED D8 Arduino   
+   // 8. 12 alarm (Beeper)
+   // 9. 47 rele za vklop mešalnega ventila
+   // 10. 48 mešalni ventil (mirovni- zaprta topla voda, delovni- miksa)
+   // 11. 49 obtočna črpalka
+   // 12. 50 releB elektromotornega ventila za izmenjevalnik B 
+   // 13. 51 T-kos tla-strop (ni aktiven!)
+int digiPin[] = {32, 34, 36, 38, 40, 42, 44, 13, 12, 47, 48, 49, 50, 51};  // output digital pini (LED, Beeper, rele)
+int countPin = 14;    // število output pinov
 
 float sensorValue[7];   // vrednost tipal
 float vrstaValue[7];    // vsota zaporedno prebranih vrednosti tipal
@@ -81,8 +94,7 @@ float tempValue[7];     // temperatura
 float MIN[7];           // minimalna temperatura tipal
 float MAX[7];           // maximalna temperatura tipal
 int indexVal[7];        // index prebranih vrednosti tipal
-float tempVoda;         // potrebna temp. vode v A izmenjevalniku pozimi
-float tempValueZ = 20.0; // začetna vrednost zunanje temp.
+
 
 
 // limit prebranih vrednosti tipal
@@ -107,15 +119,17 @@ void setup() {
           MIN[k] = 50;
           MAX[k] = 0;
        }
-//     dText[1] = ("zunaj");  
+ 
   // nastavitve display-a
      tft.reset();
      uint16_t identifier = tft.readID();
      tft.begin(identifier);
      uint8_t rotation=1;
      tft.setRotation(rotation);
-}
+       tft.fillScreen(BLACK);
 
+}
+ 
 // *** inicializacija vrednosti ************************************
 void initVrednost() {
   for (int k = 0; k < countSensor; k++)  {
@@ -140,7 +154,9 @@ void beriSensor() {
   // beri vrednost digitalnih tipal
   sensors.requestTemperatures();
   sensorValue[5] = sensors.getTempCByIndex(0);
-  sensorValue[6] = sensors.getTempCByIndex(1); 
+  sensorValue[6] = sensors.getTempCByIndex(1);
+ // trenutna vrednost temp. zraka pred rekuperacijo
+  tempZrak[0] = sensorValue[2];
 }
 
 // *** test tipal **************************************************
@@ -160,9 +176,9 @@ void loop()
   beriSensor();
     if (index == 0) {
         Serial.print("\n");
-        Serial.println("     A0      A1      A2      A3      A4      A5      A6");
+        Serial.println("     A0      A1      A2      A3      A4      A5      A6      TEMP.VODE   ");
        } 
-    for (int k = 0; k < countSensor; k++) {
+  for (int k = 0; k < countSensor; k++) {
          if (k == 0) {
              Serial.print(index+1);
              Serial.print(".  ");
@@ -170,14 +186,169 @@ void loop()
          Serial.print(sensorValue[k]);
          Serial.print("   ");
      }
-    Serial.print("\n"); 
-      
+                         Serial.print(" [0.=");
+                    Serial.print(tempZrak[0],1); 
+                    Serial.print("]  [1.=");
+                    Serial.print(tempZrak[1],1); 
+                    Serial.print("]  [2.=");
+                    Serial.print(tempZrak[2],1);
+                    Serial.print("]");
+     Serial.print("\n");
     testSensor();
     
     index = index + 1;
+//    indCrpalke = indCrpalke + 1;
     // timer kača
     narisiCrto(26+index, 25, 26+index, 34, CYAN);
-    
+   
+    // obtočna črpalka
+    narisiKrog(255, 210, 10, RED, 0);
+    if (digitalRead(digiPin[11]) == HIGH){
+        switch (indCrpalke){
+            case 1: 
+               narisiCrto(252, 205, 252, 206, CYAN);
+               narisiCrto(253, 203, 253, 208, CYAN);
+               narisiCrto(254, 202, 254, 209, CYAN);
+               narisiCrto(255, 201, 255, 210, CYAN);
+               narisiCrto(256, 203, 256, 209, CYAN);
+               narisiCrto(257, 202, 257, 208, CYAN);
+               narisiCrto(258, 205, 258, 206, CYAN);
+                  narisiCrto(249, 204, 249, 207, BLACK);
+                  narisiCrto(250, 204, 250, 209, BLACK);
+                  narisiCrto(251, 204, 251, 209, BLACK);
+                  narisiCrto(252, 204, 252, 210, BLACK);
+                  narisiCrto(253, 205, 246, 210, BLACK);
+                  narisiCrto(254, 205, 246, 210, BLACK);
+                  narisiCrto(255, 207, 246, 210, BLACK);
+            break:
+            case 2:              
+               narisiCrto(261, 204, 261, 207, CYAN);
+               narisiCrto(260, 204, 260, 209, CYAN);
+               narisiCrto(259, 204, 259, 209, CYAN);
+               narisiCrto(258, 204, 258, 210, CYAN);
+               narisiCrto(257, 205, 257, 210, CYAN);
+               narisiCrto(256, 205, 256, 210, CYAN);
+               narisiCrto(255, 207, 255, 210, CYAN);
+                  narisiCrto(252, 205, 253, 206, BLACK);
+                  narisiCrto(253, 203, 253, 208, BLACK);
+                  narisiCrto(254, 202, 254, 209, BLACK);
+                  narisiCrto(255, 201, 255, 210, BLACK);
+                  narisiCrto(256, 203, 256, 209, BLACK);
+                  narisiCrto(257, 202, 257, 208, BLACK);
+                  narisiCrto(258, 205, 258, 206, BLACK);
+            break:
+            case 3: 
+               narisiCrto(255, 210, 255, 210, CYAN);
+               narisiCrto(256, 209, 256, 211, CYAN);
+               narisiCrto(257, 208, 257, 212, CYAN);
+               narisiCrto(258, 208, 258, 212, CYAN);
+               narisiCrto(259, 207, 259, 213, CYAN);
+               narisiCrto(260, 207, 260, 213, CYAN);
+               narisiCrto(261, 208, 261, 212, CYAN);
+               narisiCrto(262, 208, 262, 212, CYAN);
+               narisiCrto(263, 209, 263, 211, CYAN);
+               narisiCrto(264, 210, 264, 210, CYAN);
+                  narisiCrto(261, 204, 261, 207, BLACK);
+                  narisiCrto(260, 204, 260, 209, BLACK);
+                  narisiCrto(259, 204, 259, 209, BLACK);
+                  narisiCrto(258, 204, 258, 210, BLACK);
+                  narisiCrto(257, 205, 257, 210, BLACK);
+                  narisiCrto(256, 205, 256, 210, BLACK);
+                  narisiCrto(255, 207, 255, 210, BLACK);
+            break:
+            case 4:
+               narisiCrto(261, 213, 261, 216, CYAN);
+               narisiCrto(260, 211, 260, 216, CYAN);
+               narisiCrto(259, 211, 259, 216, CYAN);
+               narisiCrto(258, 210, 258, 216, CYAN);
+               narisiCrto(257, 210, 257, 215, CYAN);
+               narisiCrto(256, 210, 256, 215, CYAN);
+               narisiCrto(255, 210, 255, 213, CYAN);
+                  narisiCrto(255, 210, 255, 210, BLACK);
+                  narisiCrto(256, 209, 256, 211, BLACK);
+                  narisiCrto(257, 208, 257, 212, BLACK);
+                  narisiCrto(258, 208, 258, 212, BLACK);
+                  narisiCrto(259, 207, 259, 213, BLACK);
+                  narisiCrto(260, 207, 260, 213, BLACK);
+                  narisiCrto(261, 208, 261, 212, BLACK);
+                  narisiCrto(262, 208, 262, 212, BLACK);
+                  narisiCrto(263, 209, 263, 211, BLACK);
+                  narisiCrto(264, 210, 264, 210, BLACK);
+            break:
+            case 5:
+               narisiCrto(252, 214, 252, 215, CYAN);
+               narisiCrto(253, 212, 253, 217, CYAN);
+               narisiCrto(254, 211, 254, 218, CYAN);
+               narisiCrto(255, 210, 255, 219, CYAN);
+               narisiCrto(256, 211, 256, 218, CYAN);
+               narisiCrto(257, 212, 257, 217, CYAN);
+               narisiCrto(258, 214, 258, 215, CYAN);
+                  narisiCrto(261, 213, 261, 216, BLACK);
+                  narisiCrto(260, 211, 260, 216, BLACK);
+                  narisiCrto(259, 211, 259, 216, BLACK);
+                  narisiCrto(258, 210, 258, 216, BLACK);
+                  narisiCrto(257, 210, 257, 215, BLACK);
+                  narisiCrto(256, 210, 256, 215, BLACK);
+                  narisiCrto(255, 210, 255, 213, BLACK);
+            break:
+            case 6:  
+               narisiCrto(252, 213, 252, 216, CYAN);
+               narisiCrto(253, 214, 253, 216, CYAN);
+               narisiCrto(254, 214, 254, 216, CYAN);
+               narisiCrto(255, 210, 255, 216, CYAN);
+               narisiCrto(256, 210, 256, 215, CYAN);
+               narisiCrto(257, 210, 257, 215, CYAN);
+               narisiCrto(258, 210, 258, 213, CYAN);
+                  narisiCrto(252, 214, 252, 215, BLACK);
+                  narisiCrto(253, 212, 253, 217, BLACK);
+                  narisiCrto(254, 211, 254, 218, BLACK);
+                  narisiCrto(255, 210, 255, 219, BLACK);
+                  narisiCrto(256, 211, 256, 218, BLACK);
+                  narisiCrto(257, 212, 257, 217, BLACK);
+                  narisiCrto(258, 214, 258, 215, BLACK);
+            break:
+            case 7:  
+               narisiCrto(255, 210, 255, 210, CYAN);
+               narisiCrto(254, 209, 254, 211, CYAN);
+               narisiCrto(253, 208, 253, 212, CYAN);
+               narisiCrto(252, 208, 252, 212, CYAN);
+               narisiCrto(251, 207, 251, 213, CYAN);
+               narisiCrto(250, 207, 250, 213, CYAN);
+               narisiCrto(249, 208, 249, 212, CYAN);
+               narisiCrto(248, 208, 248, 212, CYAN);
+               narisiCrto(247, 209, 247, 211, CYAN);
+               narisiCrto(246, 210, 246, 210, CYAN);
+                  narisiCrto(252, 213, 252, 216, BLACK);
+                  narisiCrto(253, 214, 253, 216, BLACK);
+                  narisiCrto(254, 214, 254, 216, BLACK);
+                  narisiCrto(255, 210, 255, 216, BLACK);
+                  narisiCrto(256, 210, 256, 215, BLACK);
+                  narisiCrto(257, 210, 257, 215, BLACK);
+                  narisiCrto(258, 210, 258, 213, BLACK);
+            break:
+            case 8:          
+               narisiCrto(249, 204, 249, 207, CYAN);
+               narisiCrto(250, 204, 250, 209, CYAN);
+               narisiCrto(251, 204, 251, 209, CYAN);
+               narisiCrto(252, 204, 252, 210, CYAN);
+               narisiCrto(253, 205, 246, 210, CYAN);
+               narisiCrto(254, 205, 246, 210, CYAN);
+               narisiCrto(255, 207, 246, 210, CYAN);
+                  narisiCrto(255, 210, 255, 210, CYAN);
+                  narisiCrto(254, 209, 254, 211, CYAN);
+                  narisiCrto(253, 208, 253, 212, CYAN);
+                  narisiCrto(252, 208, 252, 212, CYAN);
+                  narisiCrto(251, 207, 251, 213, CYAN);
+                  narisiCrto(250, 207, 250, 213, CYAN);
+                  narisiCrto(249, 208, 249, 212, CYAN);
+                  narisiCrto(248, 208, 248, 212, CYAN);
+                  narisiCrto(247, 209, 247, 211, CYAN);
+                  narisiCrto(246, 210, 246, 210, CYAN);
+               indCrpalke = 0;    
+         break:
+        }      
+    }    
+
    // --- zanka zaporedno prebranih vrednosti --- 
     if (index == indexValue) {
           // preračun povprečne trenutne temperature         
@@ -191,40 +362,35 @@ void loop()
                       MAX[k] = tempValue[k];
                  }
           }
-          tempValueZ = tempValue[1];
-          // preračun potrebne temp. vode za A izmenjevalnik pozimi
-          if (tempValue[1] < 0)
-              tempVoda = defVoda + (tempValue[1] * -1);
-          else
-              tempVoda = defVoda;
-          
+ 
           // ALARM - kontrola zmrzovanja vode  na vhodu zraka (A izmenjevalnik)  
-          if (tempValue[0] < miniVoda)                                                   
-              digitalWrite(digiPin[8], HIGH);                                                  
-          else                                                                    
-              digitalWrite(digiPin[8], LOW);
+          //if (tempValue[0] < miniVoda)                                                   
+          //    digitalWrite(digiPin[8], HIGH);                                                  
+          //else                                                                    
+          //    digitalWrite(digiPin[8], LOW);
               
           // vklop - izklop dogrevanja/pohlajevanja zraka na vpihu (B izmenjevalnik)
-          if (tempValue[1] < minB){                            
+          if (tempZrak[0] < minB){                            
               digitalWrite(digiPin[12], HIGH);     // ogrevanje
           }
           else{
-              if (tempValue[3] > maxB)
+              if (tempZrak[0] > maxB)
                  digitalWrite(digiPin[12], HIGH);  // hlajenje
               else 
-                 digitalWrite(digiPin[12], LOW);
+                 digitalWrite(digiPin[12], LOW);   // baypass
           }
-          
+         
           // usmerjanje zraka pozimi-poleti v tla-strop        
-            if (tempValue[1] < minA)                      
-                digitalWrite(digiPin[13], HIGH);     // usmeri zrak v tla 
-            else
-                digitalWrite(digiPin[13], LOW);      // usmeri zrak v strop 
-     
+ //         if (tempZraka < minA)                      
+ //             digitalWrite(digiPin[13], HIGH);     // usmeri zrak v tla 
+ //         else
+ //             digitalWrite(digiPin[13], LOW);      // usmeri zrak v strop 
+    
    //izpis vrednosti
       // glava zapisa
         Serial.print("           voda ");
         Serial.print(" zunaj  ");
+        Serial.print(" tempVZ ");
         Serial.print(" zunaj+ ");
         Serial.print(" dovod  "); 
         Serial.print(" dovod+ "); 
@@ -263,18 +429,20 @@ void loop()
     // --- konec if zanke (index == indexValue) --- 
     
     // vklop - izklop dogrevanja/pohlajevanja zraka na vhodu (A izmenjevalnik)
-    if (tempValueZ < minA){                       // ZIMA 
+
+    if (tempZrak[0] < minA){      // ZIMA 
+        swPoletje = 0;
         digitalWrite(digiPin[11], HIGH);          // obtočna črpalka dela  
-        swPoletje = 0;          
-        if (sensorValue[0] == tempVoda){          
-            digitalWrite(digiPin[9], LOW);        // voda je OK
-        }      else{ 
-            digitalWrite(digiPin[9], HIGH);       // miksaj 
-            if (sensorValue[0] < tempVoda)      
-                digitalWrite(digiPin[10], HIGH);  // dodaja toplo vodo
-            else
-                digitalWrite(digiPin[10], LOW);   // dodaja hladno vodo        
-        }
+        digitalWrite(digiPin[9], HIGH);           // miksaj 
+        // varovalka pred zmrzaljo - dogret zrak na A.izmenjevalniku pod 4°C! 
+        if (tempZrak[0] < 4.0){
+             digitalWrite(digiPin[10], HIGH);  // dodaja toplo vodo
+             Serial.print(" mix GREJE alarm  ");
+        }  
+        // konec varovalke pred zmrzaljo  
+        else{
+             mixVode(); 
+        }        
     }
     else{                                         // POLETJE
         digitalWrite(digiPin[10], LOW);
@@ -282,13 +450,20 @@ void loop()
            digitalWrite(digiPin[9], HIGH);        // ogrevanje zaprto
            delay(210000);
            swPoletje = 1;
-        }
-        if (tempValueZ > maxA)                  // hlajenje
+    }
+        if (tempZrak[0] > maxA)                  // hlajenje
             digitalWrite(digiPin[11], HIGH);      // obtočna črpalka dela
         else
             digitalWrite(digiPin[11], LOW);
     }
-          
+                     Serial.print(tempZrak[0],1); 
+                     Serial.print("    ");
+                     Serial.print(tempZrak[3],1); 
+                     Serial.print("   ");
+                     Serial.print(sensorValue[2],1);
+                     Serial.print("\n"); 
+
+
   // turn the ledPin on
   digitalWrite(digiPin[7], HIGH);  
   // stop the program for <sensorValue> milliseconds:
@@ -300,6 +475,30 @@ void loop()
 
 }
 // *** konec glavne zanke ******************************************
+
+// *** mixanje vode *******************************************
+unsigned long mixVode() {
+      if (tempZrak[0] < tempZrak[1]){
+          if (tempZrak[1] < tempZrak[2]){
+              if (tempZrak[0] < tempZrak[3]){      
+                  Serial.print(" mix GREJE   ");
+                  digitalWrite(digiPin[10], HIGH);  // dodaja toplo vodo
+              }
+              tempZrak[2] = tempZrak[1]; 
+          }
+          tempZrak[1] = tempZrak[0];
+      }
+      if (tempZrak[0] > tempZrak[1]){
+          if (tempZrak[1] > tempZrak[2]){
+         //   if (tempVode[0] > tempVode[4]){      
+              Serial.print(" mix HLADI   ");
+              digitalWrite(digiPin[10], LOW);  // dodaja hladno vodo
+         // }
+              tempZrak[2] = tempZrak[1];             
+          }
+          tempZrak[1] = tempZrak[0];
+      }
+}              
 
 // *** prikaz na display *******************************************
 unsigned long izpisTextdisplay() {
@@ -362,7 +561,7 @@ unsigned long izpisTextdisplay() {
                  tft.print(" ");} 
             tft.setTextColor(RED);
             tft.print(MAX[k],1);
-         // trend gibanja temperatur
+/*         // trend gibanja temperatur
             trendMax = MAX[k] - tempValue[k];
             trendMin = tempValue[k] - MIN[k];
             if (trendMax < 0)
@@ -379,7 +578,7 @@ unsigned long izpisTextdisplay() {
              Serial.print(MAX[k]); 
              Serial.print("  Trend MAX =  ");
              Serial.print(trendMax); 
-             Serial.println("   ");
+            Serial.println("   ");
             if (trendMax == trendMin) {
                 tft.setTextColor(WHITE);
                 tft.setCursor(312, tRow[k]);
@@ -396,8 +595,8 @@ unsigned long izpisTextdisplay() {
                     narisiCrto(315, tRow[k]+15, 312, tRow[k]+10, WHITE);
                     narisiCrto(315, tRow[k]+15, 318, tRow[k]+10, WHITE);
                }
-            }
-       }  
+          }
+*/     }  
 
     // prikaz VODA temperature
     if (tempValue[0] == 99.9) {                                                    
@@ -410,14 +609,29 @@ unsigned long izpisTextdisplay() {
        }
   tft.setTextColor(WHITE);
   tft.setCursor(25, tRow[0]);
-  tft.print("voda   ");
+  tft.print("voda  ");
   tft.setTextColor(GREEN);
+  if (MIN[0] > -10){
+      tft.print(" ");}
+  if (MIN[0] < 10){
+     if(MIN[0] > -0.1)
+       tft.print(" ");}     
   tft.print(MIN[0],1);
-  tft.print("  "); 
+  tft.print(" "); 
   tft.setTextColor(YELLOW);
+  if (tempValue[0] > -10){
+      tft.print(" ");}
+  if (tempValue[0] < 10){
+      if(tempValue[0] > -0.1)
+         tft.print(" ");}
   tft.print(tempValue[0],1);
-  tft.print("  "); 
+  tft.print(" "); 
   tft.setTextColor(RED);
+  if (MAX[0] > -10){
+      tft.print(" ");}
+  if (MAX[0] < 10){
+      if(MAX[0] > -0.1)
+         tft.print(" ");} 
   tft.print(MAX[0],1);
            // trend gibanja temperatur
             trendMax = MAX[0] - tempValue[0];
@@ -482,7 +696,7 @@ unsigned long izpisTextdisplay() {
   tft.setTextColor(WHITE);
   tft.print(">");
   tft.print(maxB,1);
-  if (digitalRead(digiPin[10]) == HIGH){
+  if (digitalRead(digiPin[12]) == HIGH){
       narisiKrog(8, 230, 8, RED, 1);
      }
   else {

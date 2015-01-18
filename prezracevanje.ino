@@ -21,13 +21,14 @@ float maxB = 23.0;       // maximum °C zraka na vhodu/vpihu za pohlajevanje (ti
  
 float minVoda = 3.0;     // mejna vrednost delovanja rekuperatorja (tipalo A0) 
 float tempZrak = 10.0;   // izhodiščna temperatura zraka za rekuperator 
-float difer[k];          // razlika med izhodišlno temp. (tempZrak) in trenutno temp. senzorja   
+float difer[7];          // razlika med izhodišlno temp. (tempZrak) in trenutno temp. senzorja   
+float stdifer;          // razlika med izhodišlno temp. (tempZrak) in trenutno temp. senzorja   
 
                 // takt delovanja priprave zraka A.izmnenjevalnika
                          // 0. takt pozimi 
                          // 1. takt poleti (samo ob prehodu na poletje)  
                          // 2. impulz - število korekcij mešalnega ventila po taktu pozimi
-int taktValue[] = {60, 210, 0};
+int taktValue[] = {20, 60, 0};
 
                 // števci delovanja 
                          // 0. števec takta
@@ -191,7 +192,7 @@ void beriSensor() {
        }                                             //    
        sValue[k] = sensorValue[k];                   //
        
-       difer[k] = tempZrak - sensorValue[k]               // izračun odstopanja temperatur od 
+       difer[k] = tempZrak - sensorValue[k];               // izračun odstopanja temperatur od 
        if (difer[k] < 0)                                  // od izhodiščne temp. za rekuperacijo
            difer[k] = difer[k] * -1;                      //    
   }
@@ -201,11 +202,6 @@ void beriSensor() {
   sensorValue[5] = sensors.getTempCByIndex(0);
   sensorValue[6] = sensors.getTempCByIndex(1); 
   
-  // izračun diference
-      difer = tempZrak - sensorValue[2];                                                
-    //abs(difer);
-    if (difer < 0)
-        difer = difer * -1; 
 }
 
 // *** test tipal **************************************************
@@ -241,59 +237,60 @@ void loop() {
          }                                                         //                              .
          else {              // ........................ZIMA........................................                                                   //                           .      
              if (sensorValue[1] < minA) {
-                 if (swPrvic[0] == 1) {                           // -------------------------    .
-                     if (zap[1] == 3) {                          //                              .
-                         if (zap[2] ==3) { 
-                             digitalWrite(digiPin[13], LOW);                       // rekuperator ON               .
+                 if (swPrvic[0] == 1) {                           // Prvič
+                     if (zap[1] == 3) {                               //                              .
+                         if (zap[2] == 3) { 
+                             digitalWrite(digiPin[13], LOW);      // rekuperator ON               .
                              swPrvic[0] = 0;                           //                              .
-                             swPrvic[1] = 1;                           //                              .
+                             swPrvic[1] = 1;                           // postavi ventil v začetno pozicijo                             .
+                          //   prvic();                                  // pozimi ZAPRE, poleti ODPRE
                              obtok(1);                                 // obtočna črpalka ON           .
-                             dolociImpulz();                           // impulz dobi vrednost
-                             korekcija();                                // korekcija temp.
-                         }
+                         }                                               
                      }
                  }
                  else {
-                 if (difer[2] != stdifer)
-                     if (taktCount[0] > difer > 5)
-                             
-                     if (taktCount[0] ==  1) {                    // začetek takta
-                         if (zap[2] == 3) { 
-                             dolociImpulz();                      // določi trajanje impulza
+                     if (difer[2] > 1) {
+                         if (difer[2] == stdifer) {
+                             if (taktCount[0] == 1) {               // na začetku takta
+                                 taktValue[2] = 1;                  // postavim impulz
+                             }
+                         } 
+                         else {    
+                             if (zap[2] == 3) {
+                                 if (difer[2] > stdifer) {          // če diferenca narašča   
+                                     stdifer = difer[2];            // 
+                                     taktCount[0] = 1;              // postavim takt 
+                                     taktValue[2] = 1;              // postavim impulz 
+                                 }
+                                 else {
+                                     stdifer = difer[2];
+                                 }
+                             }    
                          }
-                         else {
-                             taktCount[0] = 0;
-                             taktValue[2] = 0;
-                         }             
+                     }
+                     else {
+                         taktValue[2] = 0;                         // postavim impulz   
                      }
                      korekcija();                                 // korekcija temp
-                 }
+                 }                 
              }
              else {          //.........................POLETJE ....................................
                  if (swPrvic[1] == 1) {
-                     if  (zap[1] == 3) {                           //                              . 
-                          swPrvic[1] = 0;                               //                              .
-                          swPrvic[0] = 1;                               //                              .
-                          taktCount[1] = 1;  
-                          swStat[0] = 5;                                    //                              .
-                          obtok(0);                                     // obtočna črpalka OFF          .  
-                     }                                                  //    na HLADNA voda 
+                     if  (zap[1] == 3) {                           // Prvič                             . 
+                          swPrvic[1] = 0;                          //                              .
+                          swPrvic[0] = 1;                          //                              .
+                          swStat[0] = 5;                           //                              .
+                          obtok(0);                                // obtočna črpalka OFF          .
+                      //    prvic();                                 // 
+                     }                                             //  
                  }
-                 if (taktCount[1] < taktValue[1]) {                    // odpri mešalni ventil do konca
-                     digitalWrite(digiPin[10], HIGH);                  // za HLAJENJE poleti
-                     digitalWrite(digiPin[9], HIGH);                   // motorček ON
-                     taktCount[1]++;                                       //                              .
-                 }
-                 else {
-                      digitalWrite(digiPin[9], LOW);                   // motorček OFF
-                 }     
                  if (sensorValue[1] > maxB) {                      //                              .
                      obtok(1);                                     // obtočna črpalka ON           .  
-                     swStat[0] = 6;                                    //                              .
+                     swStat[0] = 6;                                //                              .
                  }                                                 //                              .     
                  else {                                            //                              .
                      obtok(0);                                     // obtočna črpalka OFF          .  
-                     swStat[0] = 7;                                    //                              .
+                     swStat[0] = 7;                                //                              .
                  }                                                 //                              .                                                    //                              .
              }                                                     //                              .
          }
@@ -355,26 +352,29 @@ void loop() {
 // *** konec glavne zanke *****************************************************************
 
 // *** dodatne rutine regulacije **********************************************************
-unsigned long dolociImpulz() {
-    taktValue[2] = 0;                                   // default vrednost impulza OFF 
-
- 
-    for (int k = 1; k < 10; k++)  {                     // določanje dolžine impulza    
-         if (difer > k)                                                         
-             taktValue[2] = k+1;
-             
-    }        
-        Serial.print("Diferenca = ");
-    Serial.print(difer);
-    Serial.print(" impulz = ");
-    Serial.print(taktValue[2]);
-    Serial.print("\n");   
+unsigned long prvic() {
+    switch (swPrvic[1]) {                        // postavi mešalni ventil v skrajno točko
+        case 0:                                               
+            digitalWrite(digiPin[10], HIGH);     // poleti ODPREMO ventil
+        break;
+        case 1:                                               
+            digitalWrite(digiPin[10], LOW);      // pozimi ZAPREMO ventil
+        break;
+    }    
+    digitalWrite(digiPin[9], HIGH);              // motorček ON
+    tft.setCursor(0, 23);
+    tft.setTextColor(MAGENTA);  tft.setTextSize(2);
+    tft.println(" prva namestitev mešalnega ventila: ");
+    tft.print(taktValue[1] * 1000);
+    delay(taktValue[1] * 1000);
+    narisiKvadrat(0, 23, 320, 18, BLACK, 1);  
+    digitalWrite(digiPin[9], LOW);              // motorček OFF 
 }
-// --- konec dolociImpulz ---------------------------------------------------------------    
+// --- konec prvic() ---------------------------------------------------------------    
 
 unsigned long korekcija() {
  // korekcija mešalnega ventila vsakič na začetku takta-zima 
-    if (taktCount[0] < taktValue[2]) {   // korekcija ON 
+    if (taktCount[0] <= taktValue[2]) {   // korekcija ON 
         if(sensorValue[2] < tempZrak) {
            digitalWrite(digiPin[10], HIGH);      // dodaja TOPLO vodo pozimi
            swStat[0] = 3;                            // status delovanja

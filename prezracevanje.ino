@@ -306,7 +306,7 @@ void loop() {
     prikazVentil(swVentil);
     
     // zaporni ventil
-    izpisZaporniVentilOdprt();
+    prikazZaporniVentil();
        
     // izpis trenutnih vrednosti na monitor - Serial.print
     izpisMonitor(); 
@@ -353,10 +353,15 @@ void loop() {
 unsigned long prvic() {
     switch (swPrvic[1]) {                        // postavi mešalni ventil v skrajno točko
         case 0:                                               
-            digitalWrite(digiPin[10], HIGH);     // poleti ODPREMO ventil
+            digitalWrite(digiPin[10], HIGH);     // poleti ODPREMO mešalni ventil
+            narisiKrog(80, 224, 12, CYAN, 1); 
+            narisiKvadrat(50, 219, 85, 10, BLACK, 1);
         break;
         case 1:                                               
-            digitalWrite(digiPin[10], LOW);      // pozimi ZAPREMO ventil
+            digitalWrite(digiPin[10], LOW);      // pozimi ZAPREMO mešalni ventil
+            narisiKvadrat(55, 219, 70, 10, BLACK, 1); 
+            narisiKrog(80, 224, 12, CYAN, 1); 
+            narisiKvadrat(76, 212, 9, 24, BLACK, 1); 
         break;
     }    
     digitalWrite(digiPin[9], HIGH);              // motorček ON
@@ -367,6 +372,15 @@ unsigned long prvic() {
     delay(taktValue[1] * 1000);
     narisiKvadrat(0, 23, 320, 18, BLACK, 1);  
     digitalWrite(digiPin[9], LOW);              // motorček OFF 
+        if (swPrvic[1] = 1) {
+        narisiKvadrat(55, 219, 70, 10, BLACK, 1); 
+        narisiKrog(80, 224, 12, CYAN, 1); 
+        narisiKvadrat(76, 212, 9, 24, BLACK, 1); 
+    }
+    else {
+        narisiKrog(80, 224, 12, CYAN, 1); 
+        narisiKvadrat(50, 219, 85, 10, BLACK, 1);
+    }
 }
 // --- konec prvic() ---------------------------------------------------------------    
 
@@ -466,6 +480,14 @@ unsigned long izpisTextdisplay() {
    narisiKvadrat(65, 88, 29, 3, BLACK, 1);
   
      // zaporni ventil
+   narisiCrto(55, 229, 120, 229, WHITE); 
+   narisiCrto(55, 218, 120, 218, WHITE);
+   narisiKrog(80, 224, 15, WHITE, 0);
+   narisiKrog(80, 224, 14, WHITE, 0); 
+   narisiKvadrat(73, 205, 15, 5, WHITE, 1);   
+   narisiKvadrat(77, 200, 7, 4, RED, 1);  
+   narisiKvadrat(60, 197, 20, 3, RED, 1);
+   narisiTrikotnik(80, 197, 80, 200, 83, 200, RED, 1);   
 //   izpisZaporniVentil();  
        
   tft.println();  
@@ -618,6 +640,41 @@ unsigned long narisiTrikotnik(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2
 }
 // --- konec narisiTrikotnik() ----------------------------------------
 
+
+unsigned long prikazZaporniVentil() {
+        narisiKvadrat(50, 219, 85, 10, BLACK, 1);
+        countRota[1]++;   
+        switch (countRota[1]) {
+            case 1:
+                narisiKrog(56, 224, 3, RED, 1);        
+                narisiKrog(68, 224, 3, RED, 1);
+                narisiKrog(80, 224, 3, RED, 1);
+            break;
+            case 2:
+                narisiKrog(68, 224, 3, RED, 1);
+                narisiKrog(80, 224, 3, RED, 1);
+                narisiKrog(92, 224, 3, RED, 1);
+            break;
+            case 3:
+                narisiKrog(80, 224, 3, RED, 1);
+                narisiKrog(92, 224, 3, RED, 1);
+                narisiKrog(104, 224, 3, RED, 1);
+            break;         
+            case 4:
+                narisiKrog(92, 224, 3, RED, 1);
+                narisiKrog(104, 224, 3, RED, 1);
+                narisiKrog(116, 224, 3, RED, 1);
+            break;         
+            case 5:
+                narisiKrog(104, 224, 3, RED, 1);
+                narisiKrog(116, 224, 3, RED, 1); 
+                narisiKrog(128, 224, 3, RED, 1);
+                countRota[1] = 0; 
+            break;
+        }
+}        
+// --- konec prikazZaporniVentil() --------------------------------------------------------
+
 unsigned long prikazCrpalka() {
     countRota[0]++; 
     narisiKrog(80, 100, 18, BLACK, 1);
@@ -631,15 +688,19 @@ unsigned long prikazCrpalka() {
             prikazVeter(2);
         break;
         case 2:
+            narisiKrog(56, 83, 3, RED, 1);
+            narisiKrog(68, 83, 3, BLACK, 1);
             narisiKrog(104, 83, 3, RED, 1);
             narisiKrog(92, 83, 3, RED, 1);
             narisiKrog(80, 83, 3, BLACK, 1);      
-            narisiKrog(68, 83, 3, BLACK, 1);
             narisiKrog(116, 83, 3, BLACK, 1); 
             narisiKrog(128, 83, 3, BLACK, 1);
             prikazVeter(1);
         break; 
         case 3:
+            narisiKrog(80, 83, 3, RED, 1);      
+            narisiKrog(68, 83, 3, RED, 1);
+            narisiKrog(56, 83, 3, BLACK, 1);
             narisiKrog(116, 83, 3, RED, 1); 
             narisiKrog(128, 83, 3, RED, 1);
             narisiKrog(92, 83, 3, BLACK, 1);
@@ -647,10 +708,12 @@ unsigned long prikazCrpalka() {
             prikazVeter(2);
         break;         
         case 4:
+            narisiKrog(104, 83, 3, RED, 1);
+            narisiKrog(92, 83, 3, RED, 1);
             narisiKrog(56, 83, 3, RED, 1);
-            narisiKrog(68, 83, 3, RED, 1);
+            narisiKrog(68, 83, 3, BLACK, 1);
             narisiKrog(116, 83, 3, BLACK, 1); 
-            narisiKrog(128, 83, 3, BLACK, 1);
+            narisiKrog(128, 83, 3, RED, 1);
             prikazVeter(1);
             countRota[0] = 0; 
         break;

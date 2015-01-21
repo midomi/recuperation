@@ -12,7 +12,7 @@
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
-// ***************************   nastavljive spremenljivke  **************
+// ***************************   nastavljive spremenljivke  ***********xx***
          // vrednosti pogojev delovanja toplotnih izmenjevalnikov A in B 
 float minA = 12.0;       // meja zima/poletje na I. izmenjevalniku
 float minB = 12.0;       // meja zima/poletje na II. izmenjevalniku 

@@ -20,8 +20,9 @@ DeviceAddress sensor2 = { 0x28, 0x81, 0x2D, 0x70, 0x06, 0x00, 0x00, 0xAE };
 DeviceAddress sensor3 = { 0x28, 0xA9, 0x60, 0x70, 0x06, 0x00, 0x00, 0xBC };
 DeviceAddress sensor4 = { 0x28, 0x39, 0xE1, 0x6E, 0x06, 0x00, 0x00, 0x26 };
 DeviceAddress sensor5 = { 0x28, 0x23, 0x05, 0x78, 0x06, 0x00, 0x00, 0x46 };
-DeviceAddress sensor6 = { 0x10, 0x15, 0x44, 0x77, 0x02, 0x08, 0x00, 0xAA };
-DeviceAddress sensor7 = { 0x28, 0x23, 0x05, 0x78, 0x06, 0x00, 0x00, 0x77 };
+DeviceAddress sensor6 = { 0x28, 0xD7, 0x64, 0x6F, 0x06, 0x00, 0x00, 0x8A };
+DeviceAddress sensor7 = { 0x10, 0x15, 0x44, 0x77, 0x02, 0x08, 0x00, 0xAA };
+DeviceAddress sensor8 = { 0x10, 0x9C, 0x49, 0x77, 0x02, 0x08, 0x00, 0x3A };
 // ***************************   nastavljive spremenljivke  ***********xx***
          // vrednosti pogojev delovanja toplotnih izmenjevalnikov A in B 
 float minA = 12.0;       // meja zima/poletje na I. izmenjevalniku
@@ -33,14 +34,15 @@ float sensorMax = 50.0;  // meja ALARM - rekuperator OFF (sensor ne deluje)
 // int startValue = 210;    // postavitev mešalnega ventila na pozicijo START
 // ************konec *********   nastavljive spremenljivke  **************
                          // korekcijski faktorji
-float sensorKore[] = {0.33, -0.53, 0.26, 0.40, -0.59, 0.27, 0.00, 0.00}; // tipal
+float sensorKore[] = {0.33, -0.53, 0.26, 0.40, -0.59, 0.27, 0.00, 0.00, 0.00}; // tipal
 
-float time = 0;          // čas odpiranja/zapiranja ventila (razlika med staro in novo pozicijo ventila)
+int time = 0;          // čas odpiranja/zapiranja ventila (razlika med staro in novo pozicijo ventila)
 float tempMix = 0;       // temperatura na katero se dela mix 
+float razlika = 0;       // temperatura na katero se dela mix 
 int impulz = 0;          // impulz motorčka
 int startVal = 0;        // preračunan vrednost START pozicije
 float difer;             // odstopanje od tempMix   
-float poziValue[] = {0, 0, 0};       // pozicija mešalnega ventila
+int poziValue[] = {0, 105, 0};       // pozicija mešalnega ventila
                          // 0. preračunana vrednost pozicije mešalnega ventila
                          // 1. stara vrednost pozicije mešalnega ventila
                          // 2. procent odprtosti mešalnega ventila 
@@ -71,8 +73,8 @@ int swPrvic[] = {1, 1,};  // svič prvič v tem režimu
                           // 0. zima (1-ON, 0-OFF)
                           // 1. poletje 
 
-float sensorValue[8];     // vrednost tipal
-float sensorValueOld[8];  // vrednost predhodne temp. tipal za izpis na display
+float sensorValue[9];     // vrednost tipal
+float sensorValueOld[9];  // vrednost predhodne temp. tipal za izpis na display
 //****************************************************************************************
 #define LCD_CS A3        // Chip Select goes to Analog 3
 #define LCD_CD A2        // Command/Data goes to Analog 2
@@ -93,11 +95,11 @@ float sensorValueOld[8];  // vrednost predhodne temp. tipal za izpis na display
 Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 
 // pozicije vrednosti temperatur za prikaz na display
-//                  {"voda ", "zunaj", "A.izm", "rekup", "B.izm", "TČ   ", "box  ", "dile   "};
-int tCol[] =        {  126,     126,      266,    266,     266,    126,     280,     280};  // stolpci vrednosti 
-int tRow[] =        {  125,      56,       56,    126,     196,    170,     160,      95};  // vrstica vrednosti
+//                  {"voda ", "zunaj", "A.izm", "rekup", "B.izm", "TČ   ", "pov  ", "box,   "dile"};
+int tCol[] =        {  126,     126,      266,    266,     266,    126,     126,     280,     280};  // stolpci vrednosti 
+int tRow[] =        {  125,      56,       56,    126,     196,    170,     140,     160,      95};  // vrstica vrednosti
 
-int countSensor = 8;     // število tipal 
+int countSensor = 9;     // število tipal 
 int digiPin[] = {13, 12, 47, 48, 49, 50, 51};  // output digital pini (LED, Beeper, rele)
 
                          // 0. 13 LED D8 Arduino   
@@ -129,7 +131,8 @@ void setup() {
      sensors.setResolution(sensor4, 11);
      sensors.setResolution(sensor5, 11);
      sensors.setResolution(sensor6, 11);
-     sensors.setResolution(sensor7, 11); 
+     sensors.setResolution(sensor7, 11);
+     sensors.setResolution(sensor8, 11);  
      
 
 
@@ -163,6 +166,7 @@ void beriSensor() {
     sensorValue[5] = sensors.getTempC(sensor5);
     sensorValue[6] = sensors.getTempC(sensor6);
     sensorValue[7] = sensors.getTempC(sensor7);
+    sensorValue[8] = sensors.getTempC(sensor8);
     for (int k = 0; k < countSensor; k++)  {
          sensorValue[k] = sensorValue[k] + sensorKore[k];
     }     
@@ -201,10 +205,30 @@ void loop() {
                      obtok(1);                                   // obtočna črpalka ON
                  }  
                  else {
+ 
+                     Serial.print(" sensorValue[6]: ");
+                     Serial.print(sensorValue[6]);
+                     Serial.print(" sensorValue[5]: ");
+                     Serial.print(sensorValue[5]);
+                     Serial.print("\n");  
                      if (difer > 1) {
-                         tempMix = 14.4 - (0.46 * sensorValue[1]);           // temp var
-                         poziValue[0] = round(((tempMix - sensorValue[7]) / (sensorValue[6] - sensorValue[7])) * 210); 
+                         if (tempMix > sensorValue[6]) {
+                             razlika = tempMix - sensorValue[6];
+                         }    
+                         else {
+                             razlika = sensorValue[6] - tempMix;
+                         } 
+                                             Serial.print(" razlika: ");
+                     Serial.print(razlika);
+                         float a;   
+                         a = round((razlika / (sensorValue[5] - sensorValue[6])) * 210); 
+                         poziValue[0] = (int)a;
                      }
+                     Serial.print(" poziValue[0]: ");
+                     Serial.print(poziValue[0]);
+                     Serial.print(" tempMix: ");
+                     Serial.print(tempMix);
+                     Serial.print("\n"); 
                      korekcija;
                  }
              }
@@ -296,6 +320,8 @@ unsigned long prvic() {
     digitalWrite(digiPin[3], HIGH);    // mešalni ventil v celoti ODPREMO (start pozicija)
     digitalWrite(digiPin[2], HIGH);     // motorček ON
     delay(210000);
+    digitalWrite(digiPin[2], HIGH);     // motorček ON
+    delay(105000);
     digitalWrite(digiPin[2], LOW);             // motorček OFF 
     narisiKvadrat(99, 20, 220, 20, BLACK, 1);
     poziValue[1] = 210;
@@ -325,7 +351,7 @@ unsigned long korekcija() {
         if (poziValue[0] > poziValue[1]) {                // korekcija ON 
             digitalWrite(digiPin[3], HIGH);                // dodaja TOPLO vodo
             impulz = poziValue[0] - poziValue[1];
-            time = impulz * 1000;
+            time = (int)impulz * 1000;
             swStat[0] = 2;
         }
         else {
@@ -495,9 +521,9 @@ unsigned long prikazValue() {
               sensorValueOld[k] = sensorValue[k]; 
               narisiKvadrat(tCol[k], tRow[k], 50, 20, BLACK, 1); 
               tft.setCursor(tCol[k], tRow[k]);
-              if (k == 0 or k == 5) tft.setTextColor(CYAN);
+              if (k == 0 or k == 5 or k == 7) tft.setTextColor(CYAN);
               else tft.setTextColor(YELLOW);            
-              if (k < 6) tft.setTextSize(2);
+              if (k < 7) tft.setTextSize(2);
                  else tft.setTextSize(1);
               if (sensorValue[k] < 10 and sensorValue[k] > -0.1)
                   tft.print(" ");   
@@ -756,16 +782,19 @@ unsigned long narisiTrikotnik(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2
 // *** prikaz na monitor računalnika ******************************************************
 unsigned long izpisMonitor() {
     if (taktCount[1] == 1) {
-        Serial.println("      voda   zunaj  I.izm  rekup  II.izm TC     box   ");
+        Serial.println("      voda   zunaj  I.izm  rekup  II.izm TC     povrat box  dile");
     } 
     for (int k = 0; k < countSensor; k++) {
          if (k == 0) {
              if (taktCount[1] < 1000) { 
                  Serial.print(" ");
-                 if (taktCount[1] < 100) {
+                 if (taktCount[1] < 1000) { 
                      Serial.print(" ");
-                     if (taktCount[1] < 10)
+                     if (taktCount[1] < 100) {
                          Serial.print(" ");
+                         if (taktCount[1] < 10)
+                             Serial.print(" ");
+                     }        
                  }
              }    
              Serial.print(taktCount[1]);
@@ -802,8 +831,6 @@ unsigned long izpisMonitor() {
      if (swObtok == 1)
          Serial.print("+C");    
      Serial.print(" [");
-     Serial.print(taktCount[0]);
-     Serial.print(" ");
      Serial.print(impulz);
      Serial.print("] ");
      Serial.print(swStat[0]);

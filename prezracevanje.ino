@@ -1,4 +1,4 @@
-
+// V 2.0
 
 // Program za krmiljenje priprave zraka z rekuperacijo in 
 // dogrevanjem/pohlajevanjem s pomočjo toplotne črpalke 
@@ -451,7 +451,7 @@ unsigned long izpisTextdisplay() {
    unsigned long start = micros();
    tft.setCursor(0, 0);
    tft.setTextColor(YELLOW);  tft.setTextSize(2);
-   tft.println(" REGULACIJA  PREZRACEVANJA");
+   tft.println("REGULACIJA  ZRAKA   V2.0");
    
    // I. izmenjevalnik
    narisiKvadrat(202, 40, 50, 50, WHITE, 0);

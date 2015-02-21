@@ -1,4 +1,4 @@
-// V 3.2.
+// V 3.2
 
 // Program za krmiljenje priprave zraka z rekuperacijo in 
 // dogrevanjem/pohlajevanjem s pomočjo toplotne črpalke 

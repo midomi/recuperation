@@ -1,4 +1,4 @@
-// V 3.1.
+// V 3.2.
 
 // Program za krmiljenje priprave zraka z rekuperacijo in 
 // dogrevanjem/pohlajevanjem s pomočjo toplotne črpalke 
@@ -30,8 +30,8 @@ float minB = 12.5;       // meja zima/poletje na II. izmenjevalniku
 float maxB = 23.0;       // meja hlajenje poleti
 float minVoda = 3.0;     // meja ALARM - rekuperator OFF 
 float sensorMax = 50.0;  // meja ALARM - rekuperator OFF (sensor ne deluje)
-float tempKore = 2.0;    // korekcija želene temperature C mix-vode
-int taktStart = 10;       // začetna vrednost takta
+float tempKore = 1.0;    // korekcija želene temperature C mix-vode
+int poziMax = 5;         // maximalna vrednost spremembe pozicije za 1 izračun
 // ************konec *********   nastavljive spremenljivke  **************
                          // korekcijski faktorji
 float sensorKore[] = {0.33, -0.53, 0.26, 0.40, -0.59, 0.27, 0.00, 0.00, 0.00}; // tipal
@@ -41,9 +41,9 @@ float razlika = 0;       // temperatura na katero se dela mix
 int impulz = 0;          // impulz motorčka
 int impulzOld = 0;       // impulz motorčka - prejšnji
 int startVal = 0;        // preračunan vrednost START pozicije
-float difer;             // odstopanje temp vode od tempMix   
-float dife;              // odstopanje zunanje temp zraka za takt 
-float dif;               // odstopanje pozicije motorčka 
+float difer[] = {0, 0};  // odstopanje temp vode od tempMix  
+                         // 0. trenutna vrednost
+                         // 1. stara vrednost 
 int poziValue[] = {0, 0, 0};       // pozicija mešalnega ventila
                          // 0. preračunana vrednost pozicije mešalnega ventila
                          // 1. stara vrednost pozicije mešalnega ventila
@@ -172,13 +172,9 @@ void beriSensor() {
     }     
       // izračun variabilne temp. VODE       
     tempMix = (14.7305 - (0.402528 * sensorValue[1]) + tempKore);     // temp var
-    difer = round(tempMix - sensorValue[0]);             // diferenca temp
-    if (difer < 0)                             
-        difer = difer * -1; 
-        
-    dife = round(tempMix - sensorValue[1]);             // diferenca takta
-    if (dife < 0)                             
-        dife = dife * -1; 
+    difer[0] = round(tempMix - sensorValue[0]);             // diferenca temp
+    if (difer[0] < 0)                             
+        difer[0] = difer[0] * -1; 
 }
 
 //*****************************************************************************************
@@ -211,22 +207,18 @@ void loop() {
                      obtok(1);                                   // obtočna črpalka ON
                  }  
                  else {
-                     if (taktValue > 0) {
-                          taktValue = taktValue - 1;
+                     taktValue++;
+                     if (difer[0] > 1) {
+                         if (difer[0] == difer[1]) { 
+                             if (taktValue > 20) 
+                                 izracunPozic();
+                         }
+                         else {  
+                             if (difer[0] > difer[1]) 
+                                izracunPozic();
+                         }        
                      }
-                     else {
-                          if (difer > 1) {                        
-                             if (sensorValue[6] > tempMix)                  // pretopla povratna voda!
-                                 poziValue[0] = poziValue[1] - round(sensorValue[6] - tempMix);
-                             else                                           // delež odprtosti ventila
-                                 poziValue[0] = 210 - (round(((sensorValue[5] - tempMix) / (sensorValue[5] - sensorValue[6])) * 210)); 
-                             taktValue = taktStart + (dife * 2);
-                             if (poziValue[0] > (poziValue[1]  + 10)) 
-                                 poziValue[0] = poziValue[1] + 10;
-                             if (poziValue[0] < (poziValue[1]  - 10)) 
-                                 poziValue[0] = poziValue[1] - 10;                                 
-                          }
-                     }
+                     difer[1] = difer[0];
                      korekcija();
                   }
              }
@@ -348,13 +340,27 @@ unsigned long prvic() {
     }    
 }
 // --- konec prvic() ---------------------------------------------------------------
+unsigned long izracunPozic() {
+    if (sensorValue[6] > tempMix)                  // pretopla povratna voda!
+        poziValue[0] = poziValue[1] - round(sensorValue[6] - tempMix);
+    else                                           // delež odprtosti ventila
+        poziValue[0] = 210 - (round(((sensorValue[5] - tempMix) / (sensorValue[5] - sensorValue[6])) * 210)); 
+
+    if (poziValue[0] > (poziValue[1]  + poziMax)) 
+        poziValue[0] = poziValue[1] + poziMax;
+    if (poziValue[0] < (poziValue[1]  - poziMax)) 
+        poziValue[0] = poziValue[1] - poziMax; 
+    if (poziValue[0] < 0)
+        poziValue[0] = 0;
+   
+    taktValue = 0;    
+}
+// --- konec izracunPozic() ---------------------------------------------------------------
 unsigned long korekcija() {
 
     // korekcija mešalnega ventila pozimi
     // izpis trenutnih vrednosti na monitor - Serial.print
-    if (poziValue[0] < 0)
-        poziValue[0] = 0;
-        
+
     if (poziValue[0] == poziValue[1]) {
         swStat[0] = 3;        // status delovanja
         impulz = 0;
@@ -380,6 +386,7 @@ unsigned long korekcija() {
     }
     digitalWrite(digiPin[2], LOW);             // motorček OFF 
     poziValue[1] = poziValue[0];
+    
     if (taktCount[0] == 1) {              // prikazVentil na display
         if (swStat[0] != swStatOld[0]) {
             taktCount[swStat[0]] = 0;
@@ -404,6 +411,7 @@ unsigned long korekcija() {
     }    
 }
 // --- konec korekcija() ---------------------------------------------------------------
+
 
 unsigned long obtok(uint8_t obt) {    
     switch (obt){
@@ -456,11 +464,22 @@ unsigned long izpisTextdisplay() {
    // mešalni ventil
    narisiKvadrat(28, 26, 64, 214, YELLOW, 0);
    narisiKvadrat(29, 27, 62, 212, YELLOW, 0);
-   narisiKvadrat(30, 28, 18, 210, RED, 1);
-   narisiKvadrat(70, 29, 18, 9, BLUE, 1); 
+   narisiKvadrat(30, 28, 29, 210, RED, 1);
+   narisiKvadrat(60, 29, 28, 210, BLUE, 1); 
    narisiCrto(23, 80, 28, 80, YELLOW);   
    narisiCrto(23, 186, 28, 186, YELLOW);
-
+   tft.setTextSize(1);
+   tft.setCursor(5, 20);
+   tft.println("210");
+   tft.setCursor(5, 75);
+   tft.println("157");
+   tft.setCursor(5, 128);
+   tft.println("105");
+   tft.setCursor(9, 180);
+   tft.println("52");
+   tft.setCursor(13, 250);
+   tft.println("0");
+   
    // obtočna črpalka
    narisiKrog(162, 100, 18, RED, 0);
    narisiKrog(162, 100, 19, RED, 0);
@@ -658,80 +677,59 @@ unsigned long prikazVentil() {
     tft.setTextSize(1);
     iRow = 27 + (210 - poziValue[0]);
     if (swStat[0] < 5) {
-        narisiKvadrat(30, iRow, 22, poziValue[0], RED, 1);
-        narisiKvadrat(68, 28, 22, (210 - poziValue[0]), BLUE, 1);
+        narisiKvadrat(30, iRow, 59, poziValue[0], RED, 1);
+        narisiKvadrat(30, 28, 59, (210 - poziValue[0]), BLUE, 1);
     }
     else
-        narisiKvadrat(30, iRow, 22, poziValue[0], BLUE, 1);    
+        narisiKvadrat(30, iRow, 59, poziValue[0], BLUE, 1);    
     for (int k = 22; k < 90; k=k+7) {
          narisiCrto(k, 133, k+4, 133, YELLOW);
     }      
-    narisiCrto(30, iRow, 89, iRow, GREEN);
+    narisiKvadrat(93, iRow-20, 15, 40, BLACK, 1);
+    narisiCrto(30, iRow, 103, iRow, GREEN);
     //-------------------------------------------------------
     if (swStat[0] == 2) {
         if (poziValue[0] < 190) {
-            narisiTrikotnik(30, iRow-16, 52, iRow-16, 41, iRow-25 , RED, 1); 
-            narisiKvadrat(32, iRow-16, 12, 12, RED, 1); 
-            narisiTrikotnik(30, iRow-16, 52, iRow-16, 41, iRow-25 , WHITE, 0); 
-            narisiKvadrat(32, iRow-16, 12, 12, WHITE, 0); 
-            narisiKvadrat(33, iRow-16, 10, 2, RED, 1); 
-            tft.setCursor(34, (iRow-12));
+            narisiTrikotnik(30, iRow-20, 52, iRow-20, 41, iRow-30 , RED, 1); 
+            narisiKvadrat(34, iRow-20, 14, 16, RED, 1); 
+            narisiTrikotnik(30, iRow-20, 52, iRow-16, 41, iRow-30 , WHITE, 0); 
+            narisiKvadrat(34, iRow-20, 14, 16, WHITE, 0); 
+            narisiKvadrat(35, iRow-20, 12, 2, RED, 1); 
+            tft.setCursor(36, (iRow-14));
             tft.print(impulz);
         }   
-        else {
-           narisiTrikotnik(30, iRow+14, 52, iRow+14, 41, iRow+4 , WHITE, 0); 
-           narisiKvadrat(32, iRow+14, 12, 12, WHITE, 0); 
-           narisiKvadrat(33, iRow+14, 10, 2, RED, 1);
-           tft.setCursor(34, (iRow+14));
-           tft.print(impulz);
-        }
+
         if (poziValue[0] > 20) {
-            narisiTrikotnik(68, iRow+16, 89, iRow+16, 78, iRow+25 , WHITE, 0); 
-            narisiKvadrat(72, iRow+4, 12, 12, WHITE, 0); 
+            narisiTrikotnik(68, iRow+20, 89, iRow+20, 78, iRow+30 , WHITE, 0); 
+            narisiKvadrat(72, iRow+4, 14, 16, WHITE, 0);
+            narisiKvadrat(75, iRow-19, 12, 2, BLACK, 1);  
             tft.setCursor(74, (iRow+6));
             tft.print(impulzOld);
         }   
-        else {
-           narisiTrikotnik(68, iRow-14, 89, iRow-14, 78, iRow-4 , WHITE, 0); 
-           narisiKvadrat(72, iRow-14, 12, 12, WHITE, 0); 
-           tft.setCursor(74, (iRow-14));
-           tft.print(impulzOld);
-        } 
     }
     if (swStat[0] == 3) {
          if (poziValue[0] > 20) {
-            narisiTrikotnik(68, iRow+16, 89, iRow+16, 78, iRow+25 , BLUE, 1); 
-            narisiKvadrat(72, iRow+4, 12, 12, BLUE, 1);            
-            narisiTrikotnik(68, iRow+16, 89, iRow+16, 78, iRow+25 , WHITE, 0); 
-            narisiKvadrat(72, iRow+4, 12, 12, WHITE, 0); 
-            narisiKvadrat(72, iRow+15, 12, 12, BLUE, 1); 
+            narisiTrikotnik(68, iRow+20, 89, iRow+20, 78, iRow+30 , BLUE, 1); 
+            narisiKvadrat(72, iRow+4, 14, 16, BLUE, 1);            
+            narisiTrikotnik(68, iRow+20, 89, iRow+16, 78, iRow+30 , WHITE, 0); 
+            narisiKvadrat(72, iRow+4, 14, 16, WHITE, 0); 
+            narisiKvadrat(72, iRow+19, 12, 2, BLUE, 1); 
             tft.setCursor(74, (iRow+6));
             tft.print(impulz);
         }   
-        else {
-           narisiTrikotnik(68, iRow-14, 89, iRow-14, 78, iRow-4 , WHITE, 0); 
-           narisiKvadrat(72, iRow-14, 12, 12, WHITE, 0); 
-           tft.setCursor(74, (iRow-14));
-           tft.print(impulz);
-        } 
         if (poziValue[0] < 190) {
-            narisiTrikotnik(68, iRow-16, 89, iRow-16, 78, iRow-25 , WHITE, 0); 
-            narisiKvadrat(72, iRow-4, 12, 12, WHITE, 0); 
+            narisiTrikotnik(30, iRow-20, 52, iRow-16, 41, iRow-30 , WHITE, 0); 
+            narisiKvadrat(34, iRow-20, 14, 16, WHITE, 0); 
+            narisiKvadrat(35, iRow-20, 12, 2, RED, 1); 
             tft.setCursor(74, (iRow-6));
             tft.print(impulzOld);
-        }   
-        else {
-           narisiTrikotnik(68, iRow-14, 89, iRow-14, 78, iRow-4 , WHITE, 0); 
-           narisiKvadrat(72, iRow-14, 12, 12, WHITE, 0); 
-           tft.setCursor(74, (iRow-14));
-           tft.print(impulzOld);
-        } 
+        }    
     }
    //--------------------------------------------------------     
     poziValue[2] = round(((poziValue[0])*100)/210);
-    tft.setCursor(54, (iRow-12));
+    tft.setCursor(95, (iRow-12));
     tft.print(poziValue[0]);
-    tft.setCursor(54, (iRow+4));
+    tft.setCursor(93, (iRow+4));
     tft.print(poziValue[2]);
     tft.print("%");  
     //-------------------------------------------------------
@@ -841,10 +839,10 @@ unsigned long izpisMonitor() {
      Serial.print(" ");
      Serial.print(tempMix);  
      Serial.print(" ");
-     Serial.print(difer); 
+     Serial.print(difer[0]); 
      Serial.print(" ");
-     Serial.print(dife); 
-     Serial.print(" ");
+     Serial.print(difer[1]); 
+     Serial.print(" ");     
      Serial.print(taktValue); 
      Serial.print(" ");
      Serial.print(poziValue[0]); 

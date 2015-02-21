@@ -1,4 +1,4 @@
-// V 2.0
+// V 3.1.
 
 // Program za krmiljenje priprave zraka z rekuperacijo in 
 // dogrevanjem/pohlajevanjem s pomočjo toplotne črpalke 
@@ -20,53 +20,42 @@ DeviceAddress sensor2 = { 0x28, 0x81, 0x2D, 0x70, 0x06, 0x00, 0x00, 0xAE };
 DeviceAddress sensor3 = { 0x28, 0xA9, 0x60, 0x70, 0x06, 0x00, 0x00, 0xBC };
 DeviceAddress sensor4 = { 0x28, 0x39, 0xE1, 0x6E, 0x06, 0x00, 0x00, 0x26 };
 DeviceAddress sensor5 = { 0x28, 0x23, 0x05, 0x78, 0x06, 0x00, 0x00, 0x46 };
-DeviceAddress sensor6 = { 0x10, 0x15, 0x44, 0x77, 0x02, 0x08, 0x00, 0xAA };
-DeviceAddress sensor7 = { 0x28, 0x23, 0x05, 0x78, 0x06, 0x00, 0x00, 0x77 };
+DeviceAddress sensor6 = { 0x28, 0xD7, 0x64, 0x6F, 0x06, 0x00, 0x00, 0x8A };
+DeviceAddress sensor7 = { 0x10, 0x15, 0x44, 0x77, 0x02, 0x08, 0x00, 0xAA };
+DeviceAddress sensor8 = { 0x10, 0x9C, 0x49, 0x77, 0x02, 0x08, 0x00, 0x3A };
 // ***************************   nastavljive spremenljivke  ***********xx***
          // vrednosti pogojev delovanja toplotnih izmenjevalnikov A in B 
 float minA = 12.0;       // meja zima/poletje na I. izmenjevalniku
-float minB = 12.0;       // meja zima/poletje na II. izmenjevalniku 
+float minB = 12.5;       // meja zima/poletje na II. izmenjevalniku 
 float maxB = 23.0;       // meja hlajenje poleti
 float minVoda = 3.0;     // meja ALARM - rekuperator OFF 
 float sensorMax = 50.0;  // meja ALARM - rekuperator OFF (sensor ne deluje)
-float startTemp[] = {15.0, 0, 10.0, 0, 0, 0, 0, 0};   // izhodiščna temperatura za mešalni ventil
-                            // 0. voda-mix (temp. vode po mixu)
-                            // 2. zrak (temp. zraka pred rekuperacijo) 
-float startTaktValue = 20;    // takt delovanja - izhodiščni                            
-int fixVar[] = {1, 1};       // svič variabilnega ali fiksnega določanja (0-fiksna, 1-variabilna)
-                            // 0. izhodiščna tempetratura
-                            // 1. takt
-int swMix = 0;           // svič na katero vrednost se ugotavlja mix vode
-                            // 0 - osnova je VODA (sensorValue[0]) 
-                            // 2 - osnova je ZRAK (sensorValue[2])                            
-
-// int startValue = 210;    // postavitev mešalnega ventila na pozicijo START
+float tempKore = 2.0;    // korekcija želene temperature C mix-vode
+int taktStart = 10;       // začetna vrednost takta
 // ************konec *********   nastavljive spremenljivke  **************
                          // korekcijski faktorji
-float sensorKore[] = {0.33, -0.53, 0.26, 0.40, -0.59, 0.27, 0.00, 0.00}; // tipal
-float diferKore[] =  {0.4, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0};  // izhodiščne temperature
-float taktKore[] =   {2.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0};  // takta umerjenja
-
+float sensorKore[] = {0.33, -0.53, 0.26, 0.40, -0.59, 0.27, 0.00, 0.00, 0.00}; // tipal
 
 float tempMix = 0;       // temperatura na katero se dela mix 
+float razlika = 0;       // temperatura na katero se dela mix 
 int impulz = 0;          // impulz motorčka
+int impulzOld = 0;       // impulz motorčka - prejšnji
 int startVal = 0;        // preračunan vrednost START pozicije
-float dif = 0;           // odstopanje med startTemp in zunanjo temp. (sensorValue[1]   
-float difer;             // odstopanje od tempMix   
-float diferOld = 0;      // prejšnja vrednost razlike me izhodiščem (tempZrak) in trenutno temp. senzorja
-float poziValue[] = {0, 0};       // pozicija mešalnega ventila
+float difer;             // odstopanje temp vode od tempMix   
+float dife;              // odstopanje zunanje temp zraka za takt 
+float dif;               // odstopanje pozicije motorčka 
+int poziValue[] = {0, 0, 0};       // pozicija mešalnega ventila
                          // 0. preračunana vrednost pozicije mešalnega ventila
-                         // 1. procent odprtosti mešalnega ventila 
+                         // 1. stara vrednost pozicije mešalnega ventila
+                         // 2. procent odprtosti mešalnega ventila 
 int iRow = 133;          // izračun vrstice prikaza delovanja mešalnega ventila
-
-float taktValue = 0;
+int taktValue  = 0;      // števec mirovanja pri visoki temp. povratne vode
 int taktCount[]  = {0, 0, 0, 0, 0, 0};   // števci delovanja 
                          // 0. števec takta 
                          // 1. zaporedno število prebranih za monitor
                          // 2. števec gretja 
                          // 3. števec mirovanja
                          // 4. števec hlajenja
-int taktCountOld[] = {0, 0, 0, 0, 0}; // števci delovanja - prejšnji
 int taktCountView[] = {0, 0, 0, 0, 0}; // števci prikaza (greje, miruje, hladi) 
 
 int countRota[] = {0, 0}; // števec pretoka vode
@@ -86,8 +75,8 @@ int swPrvic[] = {1, 1,};  // svič prvič v tem režimu
                           // 0. zima (1-ON, 0-OFF)
                           // 1. poletje 
 
-float sensorValue[8];     // vrednost tipal
-float sensorValueOld[8];  // vrednost predhodne temp. tipal za izpis na display
+float sensorValue[9];     // vrednost tipal
+float sensorValueOld[9];  // vrednost predhodne temp. tipal za izpis na display
 //****************************************************************************************
 #define LCD_CS A3        // Chip Select goes to Analog 3
 #define LCD_CD A2        // Command/Data goes to Analog 2
@@ -108,11 +97,11 @@ float sensorValueOld[8];  // vrednost predhodne temp. tipal za izpis na display
 Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 
 // pozicije vrednosti temperatur za prikaz na display
-//                  {"voda ", "zunaj", "A.izm", "rekup", "B.izm", "TČ   ", "box  ", "dile   "};
-int tCol[] =        {  126,     126,      266,    266,     266,    126,     280,     280};  // stolpci vrednosti 
-int tRow[] =        {  125,      56,       56,    126,     196,    170,     160,      95};  // vrstica vrednosti
+//                  {"voda ", "zunaj", "A.izm", "rekup", "B.izm", "TČ   ", "pov  ", "box,   "dile"};
+int tCol[] =        {  126,     126,      266,    266,     266,    126,     126,     280,     280};  // stolpci vrednosti 
+int tRow[] =        {  125,      56,       56,    126,     196,    175,     150,     160,      95};  // vrstica vrednosti
 
-int countSensor = 8;     // število tipal 
+int countSensor = 9;     // število tipal 
 int digiPin[] = {13, 12, 47, 48, 49, 50, 51};  // output digital pini (LED, Beeper, rele)
 
                          // 0. 13 LED D8 Arduino   
@@ -144,9 +133,8 @@ void setup() {
      sensors.setResolution(sensor4, 11);
      sensors.setResolution(sensor5, 11);
      sensors.setResolution(sensor6, 11);
-     sensors.setResolution(sensor7, 11); 
-     
-
+     sensors.setResolution(sensor7, 11);
+     sensors.setResolution(sensor8, 11);  
 
   // nastavitve display-a
      tft.reset();
@@ -155,9 +143,9 @@ void setup() {
      uint8_t rotation=1;
      tft.setRotation(rotation);
      tft.fillScreen(BLACK);
-     izpisTextdisplay();     // prikaz glave na display
-//     startVal = startValue * 1000;
+     izpisTextdisplay();
 }
+// --- konec SETUP()-----------------------------------
 
 // *** inicializacija vrednosti ************************************
 void initVrednost() {
@@ -178,39 +166,28 @@ void beriSensor() {
     sensorValue[5] = sensors.getTempC(sensor5);
     sensorValue[6] = sensors.getTempC(sensor6);
     sensorValue[7] = sensors.getTempC(sensor7);
+    sensorValue[8] = sensors.getTempC(sensor8);
     for (int k = 0; k < countSensor; k++)  {
          sensorValue[k] = sensorValue[k] + sensorKore[k];
     }     
-    dif = startTemp[swMix] - sensorValue[1];     // diferenca korekcije
-    if (dif < 0)
-        dif = dif * -1;
-        
-    tempMix = startTemp[swMix];                        // temp fix
-    difer = startTemp[swMix] - sensorValue[swMix];     // diferenca fix 
+      // izračun variabilne temp. VODE       
+    tempMix = (14.7305 - (0.402528 * sensorValue[1]) + tempKore);     // temp var
+    difer = round(tempMix - sensorValue[0]);             // diferenca temp
     if (difer < 0)                             
-        difer = difer * -1;
- 
-    taktValue = startTaktValue;                        // takt fix
-    if (fixVar[1] == 1) {                              // takt var
-        (taktValue) = (startTaktValue + round(dif*taktKore[swMix]));
-    }            
-
-    
-    if (fixVar[0] == 1) {                              
-        tempMix = 14.4 - (0.46 * sensorValue[1]);  // temp var
-        difer = tempMix - sensorValue[swMix];         // diferenca var  
-        if (difer < 0)                             
-            difer = difer * -1;  
-    }
+        difer = difer * -1; 
+        
+    dife = round(tempMix - sensorValue[1]);             // diferenca takta
+    if (dife < 0)                             
+        dife = dife * -1; 
 }
 
 //*****************************************************************************************
 // *** glavna zanka ***********************************************************************
 void loop() {
     beriSensor();                               // sensor vrednosti
-    taktCount[0]++;                                // takt preverjanja spremembe temp. 
-    if (taktCount[0] > taktValue)               //
-        taktCount[0] = 1;                       // začetna vrednost takta
+    taktCount[0]++;                             // takt preverjanja spremembe temp. 
+    taktCount[1]++;                             // takt delovanja (števec)    
+    taktCount[5]++;                             // takt prikaza "kače"
    
     // A.izmenjevalnik ............................VAROVALKA ..................................
 
@@ -225,53 +202,37 @@ void loop() {
          }
          else {              // ........................ZIMA........................................
              if (sensorValue[1] < minA) {
-                 if (swPrvic[0] == 1) {                              // Prvič
-                     if (sensorValue[1] < (minA-0.5)) { 
-                         digitalWrite(digiPin[6], LOW);              // rekuperator ON
-                         digitalWrite(digiPin[1], LOW);              // ALARM  piskač OFF
-                         swPrvic[0] = 0;                         
-                         swPrvic[1] = 1;                          
-                         prvic();                                    // Start pozimi postavi ventil na sredino
-                         obtok(1);                                   // obtočna črpalka ON
-                     }
-                 }
+                 if (swPrvic[0] == 1) {
+                     digitalWrite(digiPin[6], LOW);              // rekuperator ON
+                     digitalWrite(digiPin[1], LOW);              // ALARM  piskač OFF
+                     swPrvic[0] = 0;                         
+                     swPrvic[1] = 1;                          
+                     prvic();                                    // Start pozimi postavi ventil na sredino
+                     obtok(1);                                   // obtočna črpalka ON
+                 }  
                  else {
-                     if (difer > 1) {
-                         if (taktCount[0] == 1) {                // na začetku takta
-                             impulz = 1;                         // postavim impulz
-            //               if (difer > 2) 
-             //                  impulz = 2;
-                             if (difer > 3)
-                                 impulz = 3;
-                             if (difer > 10)
-                                 impulz = 10;                                 
-                             diferOld = difer;    
-                         } 
-                         else { 
-                             if (difer > (diferOld+0.5)) {             // če diferenca narašča 
-                                 taktCount[0] = 1;               // postavim takt 
-                                 impulz = 1;                     // postavim impulz 
-                              //       if (difer > 2) 
-                               //          impulz = 2;
-                                 if (difer > 3)
-                                     impulz = 3;
-                                 if (difer > 10)
-                                     impulz = 10;                                     
-                                 diferOld = difer;    
-                             }
-                             
-                         }    
-                         
+                     if (taktValue > 0) {
+                          taktValue = taktValue - 1;
                      }
                      else {
-                         diferOld = 0;                               // postavim staro diferenco   
+                          if (difer > 1) {                        
+                             if (sensorValue[6] > tempMix)                  // pretopla povratna voda!
+                                 poziValue[0] = poziValue[1] - round(sensorValue[6] - tempMix);
+                             else                                           // delež odprtosti ventila
+                                 poziValue[0] = 210 - (round(((sensorValue[5] - tempMix) / (sensorValue[5] - sensorValue[6])) * 210)); 
+                             taktValue = taktStart + (dife * 2);
+                             if (poziValue[0] > (poziValue[1]  + 10)) 
+                                 poziValue[0] = poziValue[1] + 10;
+                             if (poziValue[0] < (poziValue[1]  - 10)) 
+                                 poziValue[0] = poziValue[1] - 10;                                 
+                          }
                      }
-                     korekcija();                                    // korekcija temp
-                 }                 
+                     korekcija();
+                  }
              }
              else {          //.........................POLETJE ....................................
                  if (swPrvic[1] == 1) {
-                     if (sensorValue[1] > (minA+0.5)) {            // Prvič                        . 
+                     if (sensorValue[1] > (minB)) {                // Prvič                        . 
                           swPrvic[1] = 0;                          //                              .
                           swPrvic[0] = 1;                          //                              .
                           swStat[0] = 6;                           //                              .
@@ -292,7 +253,7 @@ void loop() {
     // konec A.izmenjevalnik ..................................................................  
 
     // B. izmenjevalnik ......................................
-       if (sensorValue[1] < minB){                            
+       if (sensorValue[1] < minA){                            
            digitalWrite(digiPin[5], HIGH);     // ogrevanje
            swStat[1] = 1;
        }
@@ -318,9 +279,7 @@ void loop() {
     // zaporni ventil
        prikazZaporniVentil();
        
-    // izpis trenutnih vrednosti na monitor - Serial.print
-       izpisMonitor();
-       
+     
        if (taktCount[0] == 1) {
             if (swStat[0] == 3) {
                 if (swStatOld[0] != 3) 
@@ -329,9 +288,7 @@ void loop() {
             swStatOld[0] = swStat[0];
        }
         
-    taktCount[1]++;
-    if (taktCount[1] > 5000)
-        taktCount[1] = 1;
+
     initVrednost();              // inicializacija vrednosti spremenljivk
 
   // turn the ledPin on
@@ -349,58 +306,80 @@ void loop() {
 // *** dodatne rutine regulacije **********************************************************
 unsigned long prvic() {
 
-    tft.setCursor(99, 20);
+    narisiKvadrat(99, 20, 220, 10, WHITE, 1);  
     tft.setTextColor(MAGENTA);  
     tft.setTextSize(1);
-    
-    tft.print("START pozicija (210 sekund...)"); 
-    digitalWrite(digiPin[3], HIGH);    // mešalni ventil v celoti ODPREMO (start pozicija)
-    digitalWrite(digiPin[2], HIGH);     // motorček ON
-    delay(210000);
-
+    tft.setCursor(99, 21);
+    tft.print("START pozicija       sekund... ");    
     if (swPrvic[0] == 0) {
-        narisiKvadrat(99, 20, 220, 20, BLACK, 1);  
-        tft.setCursor(99, 20);
-        tft.print("ZIMA pozicija (105 sekund...)");    
-        digitalWrite(digiPin[3], LOW); // pozimi postavimo mešalni ventil na POLOVICO
-        delay(105000);
-       poziValue[0] = 105;                             // trenutna pozicija delovanja motorčka
+        taktCount[0] = 351;     
+        impulz = 350;
+        poziValue[1] = 70;
         narisiKvadrat(137, 219, 70, 10, BLACK, 1); 
         narisiKrog(162, 224, 12, CYAN, 1); 
-        narisiKvadrat(158, 212, 9, 24, BLACK, 1); 
-    }  
-    else {
+        narisiKvadrat(158, 212, 9, 24, BLACK, 1);         
+    }    
+    else {   
+        taktCount[0] = 211;   
+        impulz = 210;
         narisiKrog(162, 224, 12, CYAN, 1); 
-        narisiKvadrat(132, 219, 85, 10, BLACK, 1);
+        narisiKvadrat(132, 219, 85, 10, BLACK, 1);        
+    }     
+    digitalWrite(digiPin[3], HIGH);    // mešalni ventil v celoti ODPREMO (start pozicija)
+    digitalWrite(digiPin[2], HIGH);     // motorček ON
+
+    for (int k = 0; k < impulz; k++)  {
+         taktCount[0] = taktCount[0] - 1;
+         narisiKvadrat(190, 20, 20, 10, WHITE, 1); 
+         tft.setCursor(190, 21);
+         tft.print(taktCount[0]); 
+         if (k > 210)
+             digitalWrite(digiPin[3], LOW);     // mešalni ventil postavimo na 1/3 odprto         
+         delay(1000); 
+         if (k == 30  or k == 60  or k == 90  or 
+             k == 120 or k == 150 or k == 180 or k == 210) 
+             izpisMonitor(); 
     }
-            
     digitalWrite(digiPin[2], LOW);             // motorček OFF 
     narisiKvadrat(99, 20, 220, 20, BLACK, 1);
+    impulz = 0;
     for (int k = 0; k < countSensor; k++)  {
          taktCount[k] = 0;
     }    
 }
 // --- konec prvic() ---------------------------------------------------------------
-
 unsigned long korekcija() {
 
- // korekcija mešalnega ventila vsakič na začetku takta-zima 
-    if (taktCount[0] <= impulz) {   // korekcija ON 
-        if (sensorValue[swMix] < tempMix) {
-            digitalWrite(digiPin[3], HIGH);      // dodaja TOPLO vodo pozimi
-            swStat[0] = 2;                        // status delovanja 
+    // korekcija mešalnega ventila pozimi
+    // izpis trenutnih vrednosti na monitor - Serial.print
+    if (poziValue[0] < 0)
+        poziValue[0] = 0;
+        
+    if (poziValue[0] == poziValue[1]) {
+        swStat[0] = 3;        // status delovanja
+        impulz = 0;
+        izpisMonitor(); 
+    }
+    else {
+        if (poziValue[0] > poziValue[1]) {                // korekcija ON 
+            digitalWrite(digiPin[3], HIGH);                // dodaja TOPLO vodo
+            impulz = poziValue[0] - poziValue[1];
+            swStat[0] = 2;
         }
         else {
-            digitalWrite(digiPin[3], LOW);       // dodaja HLADNO vodo
-            swStat[0] = 4;            // status delovanja
-         }     
-        digitalWrite(digiPin[2], HIGH);          // motorček ON
+            digitalWrite(digiPin[3], LOW);      // dodaja HLADNO vodo pozimi
+            impulz = (poziValue[1] - poziValue[0]);
+            swStat[0] = 4;                        // status delovanja 
+        }
+        digitalWrite(digiPin[2], HIGH);           // motorček ON
+        izpisMonitor(); 
+        for (int k = 0; k < impulz; k++)  {
+             delay(1000);
+        }     
+        taktCount[0] = 1;
     }
-    else {                                // korekcija OFF
-       digitalWrite(digiPin[2], LOW);             // motorček OFF 
-       swStat[0] = 3;                             // status delovanja
-       impulz = 0;
-    }
+    digitalWrite(digiPin[2], LOW);             // motorček OFF 
+    poziValue[1] = poziValue[0];
     if (taktCount[0] == 1) {              // prikazVentil na display
         if (swStat[0] != swStatOld[0]) {
             taktCount[swStat[0]] = 0;
@@ -419,12 +398,9 @@ unsigned long korekcija() {
             if (taktCount[swStat[0]] > 10) {
                 taktCount[swStat[0]] = taktCount[swStat[0]] - 10;
             }
-        }          
-        if (swStat[0] == 2) 
-            poziValue[0] = poziValue[0] - impulz;
-        if (swStat[0] == 4) 
-            poziValue[0] = poziValue[0] + impulz;
+        } 
         prikazVentil();
+        impulzOld = impulz;
     }    
 }
 // --- konec korekcija() ---------------------------------------------------------------
@@ -444,14 +420,14 @@ unsigned long obtok(uint8_t obt) {
 // --- konec obtok() ------------------------------------------------------- 
 // *** konec dodatne rutine regulacije ****************************************************
 
-// *** prikaz na display ******************************************************************
 
 unsigned long izpisTextdisplay() {
+// *** prikaz na display ******************************************************************
    tft.fillScreen(BLACK);
    unsigned long start = micros();
    tft.setCursor(0, 0);
    tft.setTextColor(YELLOW);  tft.setTextSize(2);
-   tft.println("REGULACIJA  ZRAKA   V2.0");
+   tft.println(" REGULACIJA  ZRAKA   V3.0");
    
    // I. izmenjevalnik
    narisiKvadrat(202, 40, 50, 50, WHITE, 0);
@@ -511,24 +487,10 @@ unsigned long izpisTextdisplay() {
   tft.println();  
   return micros() - start;
 }
-// --- konec izpisTextdisplay()-----------------------------------
+// --- konec izpisTextDisplay()
+// --------------------------------------------------------
 
 unsigned long prikazValue() {
-   // mešalni ventil
-      if (taktCount[0] > 0) {
-          if (taktCount[0] == 1) {
-              narisiKvadrat(49, 28, 3, 210, BLACK, 1);
-              narisiKvadrat(67, 28, 3, 210, BLACK, 1);
-              for (int k = 22; k < 90; k=k+7) {
-                   narisiCrto(k, 133, k+4, 133, YELLOW);
-              }      
-              narisiCrto(30, iRow, 88, iRow, GREEN);
-          }    
-          int row = 241 - (taktCount[0] * 10);
-          narisiKvadrat(49 ,row , 3, 8, CYAN, 1);
-          narisiKvadrat(67 ,row , 3, 8, CYAN, 1);
-          
-      }
  
    // I. izmenjevalnik
       
@@ -560,24 +522,14 @@ unsigned long prikazValue() {
               sensorValueOld[k] = sensorValue[k]; 
               narisiKvadrat(tCol[k], tRow[k], 50, 20, BLACK, 1); 
               tft.setCursor(tCol[k], tRow[k]);
-              if (k == 0 or k == 5) tft.setTextColor(CYAN);
+              if (k == 0 or k == 5 or k == 6) tft.setTextColor(CYAN);
               else tft.setTextColor(YELLOW);            
-              if (k < 6) tft.setTextSize(2);
+              if (k < 7) tft.setTextSize(2);
                  else tft.setTextSize(1);
               if (sensorValue[k] < 10 and sensorValue[k] > -0.1)
                   tft.print(" ");   
               tft.print(sensorValue[k],1);
           }
-/*
-          if (sensorValue[k] > sensorMax) {                                                     
-              digitalWrite(digiPin[k], HIGH);
-              narisiKrog((tCol[k]-10), (tRow[k]-7), 5, GREEN, 0);
-          }
-          else {        
-              digitalWrite(digiPin[k], LOW);             
-              narisiKrog((tCol[k]-10), (tRow[k]-7), 5, GREEN, 1);
-          }    
-*/
       }
 }
 // --- konec prikazValue()-----------------------------------
@@ -698,90 +650,91 @@ unsigned long prikazVeter(uint8_t swVeter) {
 // --- konec prikazVeter() --------------------------------------------------------
 
 unsigned long prikazVentil() {
-    narisiCrto(30, iRow, 86, iRow, BLACK);
-    switch (swStat[0]) { 
-        case 2:                  // prikaz impulzov GREJE
-            narisiKvadrat(5, 28, 15, 212, BLACK, 1);
-            for (int k = 0; k < taktCount[2]; k++) {
-                 narisiKrog(10, (231-(15*k)), 4, RED, 1);
-                 narisiKrog(10, (231-(15*k)), 5, WHITE, 0);   
-            }
-        break;
-        case 3:                  // prikaz impulzov MIRUJE
-           narisiKvadrat(53, 28, 15, 210, BLACK, 1);   
-            for (int k = 0; k < taktCount[3]; k++) {
-                 if (swStat[0] > swStatOld[1]) iRow = 141-(15*k);
-                 if (swStat[0] < swStatOld[1]) iRow = 125+(15*k);  
-                 narisiKrog(59, iRow, 4, GREEN, 1);
-                 narisiKrog(59, iRow, 5, WHITE, 0); 
-            }
-        break;    
-        case 4:                 // prikaz impulzov HLADI  
-            narisiKvadrat(97, 28, 15, 210, BLACK, 1);
-            for (int k = 0; k < taktCount[4]; k++) {
-                 narisiKrog(104, (33+(15*k)+1), 4, BLUE, 1); 
-                 narisiKrog(104, (33+(15*k)), 5, WHITE, 0);   
-            }
-        break;    
-    } 
-    if (swStat[0] != swStatOld[0]) {  
-        switch (swStatOld[0]) { 
-            case 2:                  // prikaz impulzov GREJE
-                 for (int k = 0; k < taktCount[2]; k++) {
-                     narisiKrog(10, (231-(15*k)), 4, BLACK, 1);     
-                }
-            break;
-            case 3:                  // prikaz impulzov MIRUJE
-                for (int k = 0; k < taktCount[3]; k++) {
-                     if (swStat[0] > swStatOld[1]) iRow = 141-(15*k);
-                     if (swStat[0] < swStatOld[1]) iRow = 125+(15*k);  
-                     narisiKrog(59, iRow, 5, BLACK, 1); 
-                }  
-            break;    
-            case 4:                 // prikaz impulzov HLADI  
-                 for (int k = 0; k < taktCount[4]; k++) {
-                     narisiKrog(104, (33+(15*k)), 4, BLACK, 1); 
-                }
-            break;    
-        }   
-    }
+    // brišem prejšnjo pozicijo ventila
+    narisiKvadrat(30, 28, 59, 210, BLACK, 1); 
 
     // pozicija mešalnega ventila na display-u
     tft.setTextColor(WHITE);  
     tft.setTextSize(1);
-    iRow = 27 + (poziValue[0]);
-    narisiKvadrat(30, 28, 19, 210, BLACK, 1); 
-    if (swStat[0] < 5)
-        narisiKvadrat(30, iRow, 19, (210-poziValue[0]), RED, 1);
+    iRow = 27 + (210 - poziValue[0]);
+    if (swStat[0] < 5) {
+        narisiKvadrat(30, iRow, 22, poziValue[0], RED, 1);
+        narisiKvadrat(68, 28, 22, (210 - poziValue[0]), BLUE, 1);
+    }
     else
-        narisiKvadrat(30, iRow, 19, (210-poziValue[0]), BLUE, 1);    
-    narisiKvadrat(69, 28, 20, 210, BLACK, 1);
-    narisiKvadrat(69, 28, 19, poziValue[0], BLUE, 1); 
-    narisiCrto(30, iRow, 88, iRow, GREEN);
-    
-    narisiKvadrat(95, 180, 50, 30, BLACK, 1); 
-    poziValue[1] = ((210-poziValue[0])*100)/210;
-    tft.setCursor(35, 210);
-    tft.print(taktCountView[2]);
-    if (swStat[0] > 3) {
-         tft.setCursor(71, (iRow+4));
-         tft.print(poziValue[1],0);
-         tft.print("%");
-         narisiKvadrat(53, 60, 15, 10, BLACK, 1); 
-         narisiKvadrat(53, 210, 15, 10, BLACK, 1);     
-         tft.setCursor(55, 210);
-    }     
-    if (swStat[0] < 3) {
-         tft.setCursor(32, (iRow-12));
-         tft.print(poziValue[1],0);
-         tft.print("%");
-         narisiKvadrat(53, 60, 15, 10, BLACK, 1); 
-         narisiKvadrat(53, 210, 15, 10, BLACK, 1);        
-         tft.setCursor(55, 60);
-    }        
-    tft.print(taktCountView[3]);
-    tft.setCursor(74, 60);
-    tft.print(taktCountView[4]);
+        narisiKvadrat(30, iRow, 22, poziValue[0], BLUE, 1);    
+    for (int k = 22; k < 90; k=k+7) {
+         narisiCrto(k, 133, k+4, 133, YELLOW);
+    }      
+    narisiCrto(30, iRow, 89, iRow, GREEN);
+    //-------------------------------------------------------
+    if (swStat[0] == 2) {
+        if (poziValue[0] < 190) {
+            narisiTrikotnik(30, iRow-16, 52, iRow-16, 41, iRow-25 , RED, 1); 
+            narisiKvadrat(32, iRow-16, 12, 12, RED, 1); 
+            narisiTrikotnik(30, iRow-16, 52, iRow-16, 41, iRow-25 , WHITE, 0); 
+            narisiKvadrat(32, iRow-16, 12, 12, WHITE, 0); 
+            narisiKvadrat(33, iRow-16, 10, 2, RED, 1); 
+            tft.setCursor(34, (iRow-12));
+            tft.print(impulz);
+        }   
+        else {
+           narisiTrikotnik(30, iRow+14, 52, iRow+14, 41, iRow+4 , WHITE, 0); 
+           narisiKvadrat(32, iRow+14, 12, 12, WHITE, 0); 
+           narisiKvadrat(33, iRow+14, 10, 2, RED, 1);
+           tft.setCursor(34, (iRow+14));
+           tft.print(impulz);
+        }
+        if (poziValue[0] > 20) {
+            narisiTrikotnik(68, iRow+16, 89, iRow+16, 78, iRow+25 , WHITE, 0); 
+            narisiKvadrat(72, iRow+4, 12, 12, WHITE, 0); 
+            tft.setCursor(74, (iRow+6));
+            tft.print(impulzOld);
+        }   
+        else {
+           narisiTrikotnik(68, iRow-14, 89, iRow-14, 78, iRow-4 , WHITE, 0); 
+           narisiKvadrat(72, iRow-14, 12, 12, WHITE, 0); 
+           tft.setCursor(74, (iRow-14));
+           tft.print(impulzOld);
+        } 
+    }
+    if (swStat[0] == 3) {
+         if (poziValue[0] > 20) {
+            narisiTrikotnik(68, iRow+16, 89, iRow+16, 78, iRow+25 , BLUE, 1); 
+            narisiKvadrat(72, iRow+4, 12, 12, BLUE, 1);            
+            narisiTrikotnik(68, iRow+16, 89, iRow+16, 78, iRow+25 , WHITE, 0); 
+            narisiKvadrat(72, iRow+4, 12, 12, WHITE, 0); 
+            narisiKvadrat(72, iRow+15, 12, 12, BLUE, 1); 
+            tft.setCursor(74, (iRow+6));
+            tft.print(impulz);
+        }   
+        else {
+           narisiTrikotnik(68, iRow-14, 89, iRow-14, 78, iRow-4 , WHITE, 0); 
+           narisiKvadrat(72, iRow-14, 12, 12, WHITE, 0); 
+           tft.setCursor(74, (iRow-14));
+           tft.print(impulz);
+        } 
+        if (poziValue[0] < 190) {
+            narisiTrikotnik(68, iRow-16, 89, iRow-16, 78, iRow-25 , WHITE, 0); 
+            narisiKvadrat(72, iRow-4, 12, 12, WHITE, 0); 
+            tft.setCursor(74, (iRow-6));
+            tft.print(impulzOld);
+        }   
+        else {
+           narisiTrikotnik(68, iRow-14, 89, iRow-14, 78, iRow-4 , WHITE, 0); 
+           narisiKvadrat(72, iRow-14, 12, 12, WHITE, 0); 
+           tft.setCursor(74, (iRow-14));
+           tft.print(impulzOld);
+        } 
+    }
+   //--------------------------------------------------------     
+    poziValue[2] = round(((poziValue[0])*100)/210);
+    tft.setCursor(54, (iRow-12));
+    tft.print(poziValue[0]);
+    tft.setCursor(54, (iRow+4));
+    tft.print(poziValue[2]);
+    tft.print("%");  
+    //-------------------------------------------------------
  }        
 // --- konec prikazVentil() --------------------------------------------------------
 
@@ -821,16 +774,19 @@ unsigned long narisiTrikotnik(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2
 // *** prikaz na monitor računalnika ******************************************************
 unsigned long izpisMonitor() {
     if (taktCount[1] == 1) {
-        Serial.println("      voda   zunaj  I.izm  rekup  II.izm TC     box   ");
+        Serial.println("       voda   zunaj  I.izm  rekup  II.izm TC     povrat   box  dile              impulz Status tempMix difer dife takt pozi poziOLD");
     } 
     for (int k = 0; k < countSensor; k++) {
          if (k == 0) {
              if (taktCount[1] < 1000) { 
                  Serial.print(" ");
-                 if (taktCount[1] < 100) {
+                 if (taktCount[1] < 1000) { 
                      Serial.print(" ");
-                     if (taktCount[1] < 10)
+                     if (taktCount[1] < 100) {
                          Serial.print(" ");
+                         if (taktCount[1] < 10)
+                             Serial.print(" ");
+                     }        
                  }
              }    
              Serial.print(taktCount[1]);
@@ -840,6 +796,9 @@ unsigned long izpisMonitor() {
          Serial.print("  "); 
     } 
     switch (swStat[0]) {
+        case 0:
+            Serial.print("zima PRVIC");
+        break;
         case 1:
             Serial.print("zima ALARM ");
         break;
@@ -862,13 +821,16 @@ unsigned long izpisMonitor() {
             Serial.print("poletje MIRUJE ");
         break;
      }
-     if (impulz > 0)
-         Serial.print("+M");
+     if (impulz > 0) {
+         if (swStat[0] > 3)
+             Serial.print("-");
+         else
+             Serial.print("+");
+     }        
+     Serial.print(impulz);
      if (swObtok == 1)
-         Serial.print("+C");    
+         Serial.print(" +C");    
      Serial.print(" [");
-     Serial.print(taktCount[0]);
-     Serial.print(" ");
      Serial.print(impulz);
      Serial.print("] ");
      Serial.print(swStat[0]);
@@ -877,19 +839,17 @@ unsigned long izpisMonitor() {
      Serial.print("=>");
      Serial.print(swStatOld[1]);
      Serial.print(" ");
-     Serial.print(sensorValueOld[2]);
-     Serial.print(" ");
-     Serial.print(taktValue);
-     Serial.print(" ");
      Serial.print(tempMix);  
      Serial.print(" ");
      Serial.print(difer); 
-     Serial.print("=");
-     Serial.print(diferOld);      
      Serial.print(" ");
-     Serial.print(fixVar[0]); 
-     Serial.print(fixVar[1]); 
-     Serial.print(swMix);      
+     Serial.print(dife); 
+     Serial.print(" ");
+     Serial.print(taktValue); 
+     Serial.print(" ");
+     Serial.print(poziValue[0]); 
+     Serial.print(" ");
+     Serial.print(poziValue[1]); 
      Serial.print("\n");
 }
 // --- konec izpisMonitor() --------------------------------------------------------
